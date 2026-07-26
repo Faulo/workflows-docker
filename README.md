@@ -26,6 +26,10 @@ on:
 permissions:
     contents: read
 
+concurrency:
+    group: docker-publish
+    cancel-in-progress: false
+
 jobs:
     publish:
         strategy:
@@ -43,7 +47,6 @@ jobs:
 
         uses: Faulo/workflows-docker/.github/workflows/publish.yml@v1
         with:
-            image: farah
             tag: ${{matrix.variant.tag}}
             build_args: ${{toJSON(matrix.variant.build_args)}}
         secrets:
@@ -52,7 +55,7 @@ jobs:
 ```
 
 Each matrix entry runs a Linux build and a Windows build in parallel. Given
-`image: farah` and `tag: 8.2`, the workflow publishes:
+`DOCKER_IMAGE=farah` in `.env` and `tag: 8.2`, the workflow publishes:
 
 ```text
 <DOCKERHUB_USERNAME>/farah:8.2-linux
@@ -60,13 +63,16 @@ Each matrix entry runs a Linux build and a Windows build in parallel. Given
 <DOCKERHUB_USERNAME>/farah:8.2
 ```
 
-For an image without variants, use a single matrix entry:
+For an image without variants, call the workflow directly. The tag defaults to
+`latest`, and no `with` block is needed:
 
 ```yaml
-matrix:
-    variant:
-        - tag: latest
-          build_args: {}
+jobs:
+    publish:
+        uses: Faulo/workflows-docker/.github/workflows/publish.yml@v1
+        secrets:
+            DOCKERHUB_USERNAME: ${{secrets.DOCKERHUB_USERNAME}}
+            DOCKERHUB_TOKEN: ${{secrets.DOCKERHUB_TOKEN}}
 ```
 
 ## Requirements
@@ -75,6 +81,14 @@ The calling repository must define these GitHub Actions secrets:
 
 - `DOCKERHUB_USERNAME`: Docker Hub username and image namespace.
 - `DOCKERHUB_TOKEN`: Docker Hub access token with push permission.
+
+The root `.env` must define the Docker Hub repository name:
+
+```dotenv
+DOCKER_IMAGE=example
+```
+
+The optional `image` input overrides `DOCKER_IMAGE`.
 
 By default, the workflow expects:
 
@@ -93,8 +107,8 @@ JSON scalars; strings are recommended.
 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
-| `image` | yes | | Docker Hub repository name without the namespace |
-| `tag` | yes | | Tag for the merged image |
+| `image` | no | `DOCKER_IMAGE` from `.env` | Docker Hub repository name without the namespace |
+| `tag` | no | `latest` | Tag for the merged image |
 | `build_args` | no | `{}` | JSON object containing Docker build arguments |
 | `linux_context` | no | `linux` | Linux build context |
 | `linux_dockerfile` | no | `linux/Dockerfile` | Linux Dockerfile path |
@@ -106,7 +120,6 @@ Override paths when a project uses a different layout:
 ```yaml
 with:
     image: example
-    tag: latest
     build_args: ${{toJSON(matrix.variant.build_args)}}
     linux_context: docker
     linux_dockerfile: docker/Dockerfile.linux
@@ -116,9 +129,11 @@ with:
 
 ## Publication Behavior
 
-Publication is serialized per calling repository, image, and tag. A merged tag
-is updated only after both platform builds succeed. The merge job verifies that
-the resulting manifest contains `linux/amd64` and `windows/amd64`.
+Publication is serialized per calling repository and tag. Calling workflows
+should also use workflow-level concurrency, as shown above, to queue consecutive
+runs. A merged tag is updated only after both platform builds succeed. The merge
+job verifies that the resulting manifest contains `linux/amd64` and
+`windows/amd64`.
 
 The Linux build uses GitHub Actions caching and publishes provenance and SBOM
 attestations. The Windows build restores its previous platform image as a Docker

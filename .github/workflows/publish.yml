@@ -4,12 +4,14 @@ on:
     workflow_call:
         inputs:
             image:
-                description: Docker Hub repository name without the namespace
-                required: true
+                description: Docker Hub repository name; defaults to DOCKER_IMAGE from .env
+                required: false
+                default: ""
                 type: string
             tag:
                 description: Tag for the merged multi-platform image
-                required: true
+                required: false
+                default: latest
                 type: string
             build_args:
                 description: JSON object containing Docker build arguments
@@ -48,16 +50,65 @@ permissions:
     contents: read
 
 concurrency:
-    group: docker-publish-${{github.repository}}-${{inputs.image}}-${{inputs.tag}}
+    group: docker-publish-${{github.repository}}-${{inputs.tag}}
     cancel-in-progress: false
 
 jobs:
+    configuration:
+        runs-on: ubuntu-24.04
+        timeout-minutes: 5
+        outputs:
+            image: ${{steps.image.outputs.value}}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+            - name: Resolve image name
+              id: image
+              shell: bash
+              env:
+                  INPUT_IMAGE: ${{inputs.image}}
+              run: |
+                  image="${INPUT_IMAGE}"
+
+                  if [[ -z "${image}" ]]; then
+                    if [[ ! -f .env ]]; then
+                      echo "Missing .env and no image input was provided" >&2
+                      exit 1
+                    fi
+
+                    line="$(grep -m1 -E '^[[:space:]]*DOCKER_IMAGE[[:space:]]*=' .env || true)"
+                    if [[ -z "${line}" ]]; then
+                      echo "Missing DOCKER_IMAGE in .env" >&2
+                      exit 1
+                    fi
+
+                    image="${line#*=}"
+                    image="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]\r]*$//' <<< "${image}")"
+
+                    if (( ${#image} >= 2 )); then
+                      first="${image:0:1}"
+                      last="${image: -1}"
+                      if [[ "${first}" == '"' && "${last}" == '"' ]] ||
+                         [[ "${first}" == "'" && "${last}" == "'" ]]; then
+                        image="${image:1:${#image}-2}"
+                      fi
+                    fi
+                  fi
+
+                  if [[ ! "${image}" =~ ^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$ ]]; then
+                    echo "Invalid Docker Hub repository name in image/DOCKER_IMAGE" >&2
+                    exit 1
+                  fi
+
+                  echo "value=${image}" >> "${GITHUB_OUTPUT}"
+
     docker-windows:
+        needs: configuration
         runs-on: windows-2022
         timeout-minutes: 180
         env:
             BUILD_ARGS: ${{inputs.build_args}}
-            IMAGE: ${{secrets.DOCKERHUB_USERNAME}}/${{inputs.image}}
+            IMAGE: ${{secrets.DOCKERHUB_USERNAME}}/${{needs.configuration.outputs.image}}
             IMAGE_TAG: ${{inputs.tag}}
         steps:
             - name: Ensure Docker is running
@@ -139,11 +190,12 @@ jobs:
               run: docker image push "${env:IMAGE}:${env:IMAGE_TAG}-windows"
 
     docker-linux:
+        needs: configuration
         runs-on: ubuntu-24.04
         timeout-minutes: 90
         env:
             BUILD_ARGS: ${{inputs.build_args}}
-            IMAGE: ${{secrets.DOCKERHUB_USERNAME}}/${{inputs.image}}
+            IMAGE: ${{secrets.DOCKERHUB_USERNAME}}/${{needs.configuration.outputs.image}}
             IMAGE_TAG: ${{inputs.tag}}
         steps:
             - name: Checkout
@@ -180,8 +232,8 @@ jobs:
                   tags: ${{env.IMAGE}}:${{env.IMAGE_TAG}}-linux
                   platforms: linux/amd64
                   build-args: ${{steps.build-args.outputs.value}}
-                  cache-from: type=gha,scope=${{inputs.image}}-${{inputs.tag}}-linux
-                  cache-to: type=gha,mode=max,scope=${{inputs.image}}-${{inputs.tag}}-linux
+                  cache-from: type=gha,scope=${{needs.configuration.outputs.image}}-${{inputs.tag}}-linux
+                  cache-to: type=gha,mode=max,scope=${{needs.configuration.outputs.image}}-${{inputs.tag}}-linux
                   provenance: mode=max
                   sbom: true
 
@@ -189,10 +241,11 @@ jobs:
         runs-on: ubuntu-24.04
         timeout-minutes: 15
         needs:
+            - configuration
             - docker-windows
             - docker-linux
         env:
-            IMAGE: ${{secrets.DOCKERHUB_USERNAME}}/${{inputs.image}}
+            IMAGE: ${{secrets.DOCKERHUB_USERNAME}}/${{needs.configuration.outputs.image}}
             IMAGE_TAG: ${{inputs.tag}}
         steps:
             - name: Set up Docker Buildx
