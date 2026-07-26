@@ -1,0 +1,220 @@
+name: Publish Docker image
+
+on:
+    workflow_call:
+        inputs:
+            image:
+                description: Docker Hub repository name without the namespace
+                required: true
+                type: string
+            tag:
+                description: Tag for the merged multi-platform image
+                required: true
+                type: string
+            build_args:
+                description: JSON object containing Docker build arguments
+                required: false
+                default: "{}"
+                type: string
+            linux_context:
+                description: Linux Docker build context
+                required: false
+                default: linux
+                type: string
+            linux_dockerfile:
+                description: Linux Dockerfile path
+                required: false
+                default: linux/Dockerfile
+                type: string
+            windows_context:
+                description: Windows Docker build context
+                required: false
+                default: windows
+                type: string
+            windows_dockerfile:
+                description: Windows Dockerfile path
+                required: false
+                default: windows/Dockerfile
+                type: string
+        secrets:
+            DOCKERHUB_USERNAME:
+                description: Docker Hub username and image namespace
+                required: true
+            DOCKERHUB_TOKEN:
+                description: Docker Hub access token with push permission
+                required: true
+
+permissions:
+    contents: read
+
+concurrency:
+    group: docker-publish-${{github.repository}}-${{inputs.image}}-${{inputs.tag}}
+    cancel-in-progress: false
+
+jobs:
+    docker-windows:
+        runs-on: windows-2022
+        timeout-minutes: 180
+        env:
+            BUILD_ARGS: ${{inputs.build_args}}
+            IMAGE: ${{secrets.DOCKERHUB_USERNAME}}/${{inputs.image}}
+            IMAGE_TAG: ${{inputs.tag}}
+        steps:
+            - name: Ensure Docker is running
+              shell: pwsh
+              run: |
+                  $service = Get-Service docker -ErrorAction Stop
+                  if ($service.Status -ne 'Running') {
+                    Start-Service docker
+                  }
+
+                  $ready = $false
+                  for ($attempt = 1; $attempt -le 24; $attempt++) {
+                    docker info *> $null
+                    if ($LASTEXITCODE -eq 0) {
+                      $ready = $true
+                      break
+                    }
+
+                    Start-Sleep -Seconds 5
+                  }
+
+                  if (-not $ready) {
+                    Get-Service docker
+                    throw "Docker daemon not ready after 120 seconds"
+                  }
+
+                  docker version
+            - name: Checkout
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+            - name: Login to Docker Hub
+              uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+              with:
+                  username: ${{secrets.DOCKERHUB_USERNAME}}
+                  password: ${{secrets.DOCKERHUB_TOKEN}}
+            - name: Restore Windows image cache
+              continue-on-error: true
+              shell: pwsh
+              run: docker image pull "${env:IMAGE}:${env:IMAGE_TAG}-windows"
+            - name: Build Windows image
+              shell: pwsh
+              env:
+                  BUILD_CONTEXT: ${{inputs.windows_context}}
+                  DOCKERFILE: ${{inputs.windows_dockerfile}}
+              run: |
+                  $arguments = $env:BUILD_ARGS | ConvertFrom-Json
+                  if ($arguments -isnot [PSCustomObject]) {
+                    throw "build_args must be a JSON object"
+                  }
+
+                  $dockerBuildArgs = @()
+                  foreach ($argument in $arguments.PSObject.Properties) {
+                    if ($argument.Name -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') {
+                      throw "Invalid build argument name: $($argument.Name)"
+                    }
+
+                    $value = if ($argument.Value -is [string]) {
+                      $argument.Value
+                    } else {
+                      $argument.Value | ConvertTo-Json -Compress
+                    }
+
+                    $dockerBuildArgs += "--build-arg"
+                    $dockerBuildArgs += "$($argument.Name)=$value"
+                  }
+
+                  docker build --isolation=hyperv `
+                    --pull `
+                    --cache-from "${env:IMAGE}:${env:IMAGE_TAG}-windows" `
+                    --file $env:DOCKERFILE `
+                    --tag "${env:IMAGE}:${env:IMAGE_TAG}-windows" `
+                    @dockerBuildArgs `
+                    $env:BUILD_CONTEXT
+
+                  if ($LASTEXITCODE -ne 0) {
+                    exit $LASTEXITCODE
+                  }
+            - name: Push Windows image
+              shell: pwsh
+              run: docker image push "${env:IMAGE}:${env:IMAGE_TAG}-windows"
+
+    docker-linux:
+        runs-on: ubuntu-24.04
+        timeout-minutes: 90
+        env:
+            BUILD_ARGS: ${{inputs.build_args}}
+            IMAGE: ${{secrets.DOCKERHUB_USERNAME}}/${{inputs.image}}
+            IMAGE_TAG: ${{inputs.tag}}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+            - name: Login to Docker Hub
+              uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+              with:
+                  username: ${{secrets.DOCKERHUB_USERNAME}}
+                  password: ${{secrets.DOCKERHUB_TOKEN}}
+            - name: Prepare build arguments
+              id: build-args
+              shell: bash
+              run: |
+                  jq -e '
+                    type == "object" and
+                    all(keys[]; test("^[A-Za-z_][A-Za-z0-9_]*$"))
+                  ' <<< "${BUILD_ARGS}" > /dev/null
+
+                  delimiter="docker_build_args_${RANDOM}_${RANDOM}"
+                  {
+                    echo "value<<${delimiter}"
+                    jq -r 'to_entries[] | "\(.key)=\(.value | tostring)"' <<< "${BUILD_ARGS}"
+                    echo "${delimiter}"
+                  } >> "${GITHUB_OUTPUT}"
+            - name: Build and push Linux image
+              uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+              with:
+                  context: ${{inputs.linux_context}}
+                  file: ${{inputs.linux_dockerfile}}
+                  push: true
+                  pull: true
+                  tags: ${{env.IMAGE}}:${{env.IMAGE_TAG}}-linux
+                  platforms: linux/amd64
+                  build-args: ${{steps.build-args.outputs.value}}
+                  cache-from: type=gha,scope=${{inputs.image}}-${{inputs.tag}}-linux
+                  cache-to: type=gha,mode=max,scope=${{inputs.image}}-${{inputs.tag}}-linux
+                  provenance: mode=max
+                  sbom: true
+
+    merge:
+        runs-on: ubuntu-24.04
+        timeout-minutes: 15
+        needs:
+            - docker-windows
+            - docker-linux
+        env:
+            IMAGE: ${{secrets.DOCKERHUB_USERNAME}}/${{inputs.image}}
+            IMAGE_TAG: ${{inputs.tag}}
+        steps:
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+            - name: Login to Docker Hub
+              uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+              with:
+                  username: ${{secrets.DOCKERHUB_USERNAME}}
+                  password: ${{secrets.DOCKERHUB_TOKEN}}
+            - name: Merge manifests
+              shell: bash
+              run: |
+                  docker buildx imagetools create \
+                    --tag "${IMAGE}:${IMAGE_TAG}" \
+                    "${IMAGE}:${IMAGE_TAG}-linux" \
+                    "${IMAGE}:${IMAGE_TAG}-windows"
+            - name: Verify merged manifest
+              shell: bash
+              run: |
+                  manifest="$(docker buildx imagetools inspect "${IMAGE}:${IMAGE_TAG}" --raw)"
+                  jq -e '
+                    any(.manifests[]; .platform.os == "linux" and .platform.architecture == "amd64") and
+                    any(.manifests[]; .platform.os == "windows" and .platform.architecture == "amd64")
+                  ' <<< "${manifest}"
+                  docker buildx imagetools inspect "${IMAGE}:${IMAGE_TAG}"
