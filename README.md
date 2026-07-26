@@ -31,7 +31,38 @@ concurrency:
     cancel-in-progress: false
 
 jobs:
+    configuration:
+        runs-on: ubuntu-24.04
+        outputs:
+            image: ${{steps.image.outputs.value}}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+            - name: Read image name
+              id: image
+              shell: bash
+              run: |
+                  line="$(grep -m1 -E '^[[:space:]]*DOCKER_IMAGE[[:space:]]*=' .env || true)"
+                  if [[ -z "${line}" ]]; then
+                    echo "Missing DOCKER_IMAGE in .env" >&2
+                    exit 1
+                  fi
+
+                  image="${line#*=}"
+                  image="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]\r]*$//' <<< "${image}")"
+                  if [[ "${image}" =~ ^(\"[^\"]*\"|\'[^\']*\')$ ]]; then
+                    image="${image:1:${#image}-2}"
+                  fi
+
+                  if [[ ! "${image}" =~ ^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$ ]]; then
+                    echo "Invalid Docker Hub repository name in DOCKER_IMAGE" >&2
+                    exit 1
+                  fi
+
+                  echo "value=${image}" >> "${GITHUB_OUTPUT}"
+
     publish:
+        needs: configuration
         strategy:
             fail-fast: false
             matrix:
@@ -47,6 +78,7 @@ jobs:
 
         uses: Faulo/workflows-docker/.github/workflows/publish.yml@v1
         with:
+            image: ${{needs.configuration.outputs.image}}
             tag: ${{matrix.variant.tag}}
             build_args: ${{toJSON(matrix.variant.build_args)}}
         secrets:
@@ -63,16 +95,18 @@ Each matrix entry runs a Linux build and a Windows build in parallel. Given
 <DOCKERHUB_USERNAME>/farah:8.2
 ```
 
-For an image without variants, call the workflow directly. The tag defaults to
-`latest`, and no `with` block is needed:
+For an image without variants, keep the configuration job and call the workflow
+once. The tag defaults to `latest`:
 
 ```yaml
-jobs:
-    publish:
-        uses: Faulo/workflows-docker/.github/workflows/publish.yml@v1
-        secrets:
-            DOCKERHUB_USERNAME: ${{secrets.DOCKERHUB_USERNAME}}
-            DOCKERHUB_TOKEN: ${{secrets.DOCKERHUB_TOKEN}}
+publish:
+    needs: configuration
+    uses: Faulo/workflows-docker/.github/workflows/publish.yml@v1
+    with:
+        image: ${{needs.configuration.outputs.image}}
+    secrets:
+        DOCKERHUB_USERNAME: ${{secrets.DOCKERHUB_USERNAME}}
+        DOCKERHUB_TOKEN: ${{secrets.DOCKERHUB_TOKEN}}
 ```
 
 ## Requirements
@@ -82,13 +116,12 @@ The calling repository must define these GitHub Actions secrets:
 - `DOCKERHUB_USERNAME`: Docker Hub username and image namespace.
 - `DOCKERHUB_TOKEN`: Docker Hub access token with push permission.
 
-The root `.env` must define the Docker Hub repository name:
+The calling workflow must pass the Docker Hub repository name through `image`.
+The example reads it from the caller's root `.env`:
 
 ```dotenv
 DOCKER_IMAGE=example
 ```
-
-The optional `image` input overrides `DOCKER_IMAGE`.
 
 By default, the workflow expects:
 
@@ -107,7 +140,7 @@ JSON scalars; strings are recommended.
 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
-| `image` | no | `DOCKER_IMAGE` from `.env` | Docker Hub repository name without the namespace |
+| `image` | yes | none | Docker Hub repository name without the namespace |
 | `tag` | no | `latest` | Tag for the merged image |
 | `build_args` | no | `{}` | JSON object containing Docker build arguments |
 | `linux_context` | no | `linux` | Linux build context |
