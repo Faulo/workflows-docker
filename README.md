@@ -34,32 +34,14 @@ jobs:
     configuration:
         runs-on: ubuntu-24.04
         outputs:
-            image: ${{steps.image.outputs.value}}
+            image: ${{steps.image.outputs.DOCKER_IMAGE}}
         steps:
             - name: Checkout
               uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
             - name: Read image name
               id: image
               shell: bash
-              run: |
-                  line="$(grep -m1 -E '^[[:space:]]*DOCKER_IMAGE[[:space:]]*=' .env || true)"
-                  if [[ -z "${line}" ]]; then
-                    echo "Missing DOCKER_IMAGE in .env" >&2
-                    exit 1
-                  fi
-
-                  image="${line#*=}"
-                  image="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]\r]*$//' <<< "${image}")"
-                  if [[ "${image}" =~ ^(\"[^\"]*\"|\'[^\']*\')$ ]]; then
-                    image="${image:1:${#image}-2}"
-                  fi
-
-                  if [[ ! "${image}" =~ ^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$ ]]; then
-                    echo "Invalid Docker Hub repository name in DOCKER_IMAGE" >&2
-                    exit 1
-                  fi
-
-                  echo "value=${image}" >> "${GITHUB_OUTPUT}"
+              run: grep -m1 '^DOCKER_IMAGE=' .env >> "${GITHUB_OUTPUT}"
 
     publish:
         needs: configuration
