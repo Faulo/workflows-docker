@@ -241,12 +241,39 @@ jobs:
                   ' <<< "${WINDOWS_VARIANTS}" > /dev/null
 
                   sources=("${IMAGE}:${IMAGE_TAG}-linux")
+                  windows_descriptors=()
+                  descriptor_index=0
                   while IFS= read -r variant_tag; do
-                    sources+=("${IMAGE}:${IMAGE_TAG}-${variant_tag}")
+                    variant_image="${IMAGE}:${IMAGE_TAG}-${variant_tag}"
+                    descriptor="windows-descriptor-${descriptor_index}.json"
+                    docker buildx imagetools inspect "${variant_image}" --format '{{json .}}' |
+                      jq -e '
+                        {
+                          mediaType: .manifest.mediaType,
+                          digest: .manifest.digest,
+                          size: .manifest.size,
+                          platform: {
+                            architecture: .image.architecture,
+                            os: .image.os,
+                            "os.version": .image."os.version"
+                          }
+                        } |
+                        select(
+                          .mediaType != null and
+                          (.digest | type == "string" and length > 0) and
+                          (.size | type == "number") and
+                          (.platform.architecture | type == "string" and length > 0) and
+                          (.platform.os == "windows") and
+                          (.platform."os.version" | type == "string" and length > 0)
+                        )
+                      ' > "${descriptor}"
+                    windows_descriptors+=(--file "${descriptor}")
+                    descriptor_index=$((descriptor_index + 1))
                   done < <(jq -r '.[].tag' <<< "${WINDOWS_VARIANTS}")
 
                   docker buildx imagetools create \
                     --tag "${IMAGE}:${IMAGE_TAG}" \
+                    "${windows_descriptors[@]}" \
                     "${sources[@]}"
             - name: Verify merged manifest
               shell: bash
@@ -259,6 +286,7 @@ jobs:
                       select(.platform.os == "windows" and .platform.architecture == "amd64") |
                       .platform["os.version"]] as $windows_versions |
                       ($windows_versions | length) == $expected_windows and
+                      all($windows_versions[]; type == "string" and length > 0) and
                       ($windows_versions | unique | length) == $expected_windows)
                   ' <<< "${manifest}"
                   docker buildx imagetools inspect "${IMAGE}:${IMAGE_TAG}"
