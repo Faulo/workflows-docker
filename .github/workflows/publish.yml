@@ -241,39 +241,29 @@ jobs:
                   ' <<< "${WINDOWS_VARIANTS}" > /dev/null
 
                   sources=("${IMAGE}:${IMAGE_TAG}-linux")
-                  windows_descriptors=()
-                  descriptor_index=0
                   while IFS= read -r variant_tag; do
                     variant_image="${IMAGE}:${IMAGE_TAG}-${variant_tag}"
-                    descriptor="windows-descriptor-${descriptor_index}.json"
-                    docker buildx imagetools inspect "${variant_image}" --format '{{json .}}' |
-                      jq -e '
-                        {
-                          mediaType: .manifest.mediaType,
-                          digest: .manifest.digest,
-                          size: .manifest.size,
-                          platform: {
-                            architecture: .image.architecture,
-                            os: .image.os,
-                            "os.version": .image."os.version"
-                          }
-                        } |
-                        select(
-                          .mediaType != null and
-                          (.digest | type == "string" and length > 0) and
-                          (.size | type == "number") and
-                          (.platform.architecture | type == "string" and length > 0) and
-                          (.platform.os == "windows") and
-                          (.platform."os.version" | type == "string" and length > 0)
-                        )
-                      ' > "${descriptor}"
-                    windows_descriptors+=(--file "${descriptor}")
-                    descriptor_index=$((descriptor_index + 1))
+                    variant_manifest="${variant_image}-manifest"
+                    inspection="$(docker buildx imagetools inspect "${variant_image}" --format '{{json .}}')"
+                    os_version="$(jq -er '
+                      select(.image.os == "windows" and .image.architecture == "amd64") |
+                      .image["os.version"] |
+                      select(type == "string" and length > 0)
+                    ' <<< "${inspection}")"
+
+                    docker manifest create "${variant_manifest}" "${variant_image}"
+                    docker manifest annotate \
+                      "${variant_manifest}" \
+                      "${variant_image}" \
+                      --os windows \
+                      --arch amd64 \
+                      --os-version "${os_version}"
+                    docker manifest push "${variant_manifest}"
+                    sources+=("${variant_manifest}")
                   done < <(jq -r '.[].tag' <<< "${WINDOWS_VARIANTS}")
 
                   docker buildx imagetools create \
                     --tag "${IMAGE}:${IMAGE_TAG}" \
-                    "${windows_descriptors[@]}" \
                     "${sources[@]}"
             - name: Verify merged manifest
               shell: bash
