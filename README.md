@@ -91,6 +91,29 @@ publish:
         DOCKERHUB_TOKEN: ${{secrets.DOCKERHUB_TOKEN}}
 ```
 
+To publish multiple Windows base variants in the same merged tag, pass a JSON
+array through `windows_variants`. Each entry gets its own cache and published
+platform tag:
+
+```yaml
+publish:
+    needs: configuration
+    uses: Faulo/workflows-docker/.github/workflows/publish.yml@v1
+    with:
+        image: ${{needs.configuration.outputs.image}}
+        windows_variants: >-
+            [
+              {"tag":"windows-1809","build_args":{"OS_BASE":"1809"}},
+              {"tag":"windows-20H2","build_args":{"OS_BASE":"20H2"}}
+            ]
+    secrets:
+        DOCKERHUB_USERNAME: ${{secrets.DOCKERHUB_USERNAME}}
+        DOCKERHUB_TOKEN: ${{secrets.DOCKERHUB_TOKEN}}
+```
+
+This example publishes `latest-windows-1809` and `latest-windows-20H2`, then
+places both Windows manifests alongside `latest-linux` in `latest`.
+
 ## Requirements
 
 The calling repository must define these GitHub Actions secrets:
@@ -125,6 +148,7 @@ JSON scalars; strings are recommended.
 | `image` | yes | none | Docker Hub repository name without the namespace |
 | `tag` | no | `latest` | Tag for the merged image |
 | `build_args` | no | `{}` | JSON object containing Docker build arguments |
+| `windows_variants` | no | `[{"tag":"windows","build_args":{}}]` | JSON array of Windows tag suffixes and variant-specific build arguments |
 | `linux_context` | no | `linux` | Linux build context |
 | `linux_dockerfile` | no | `linux/Dockerfile` | Linux Dockerfile path |
 | `windows_context` | no | `windows` | Windows build context |
@@ -146,9 +170,9 @@ with:
 
 Publication is serialized per calling repository and tag. Calling workflows
 should also use workflow-level concurrency, as shown above, to queue consecutive
-runs. A merged tag is updated only after both platform builds succeed. The merge
-job verifies that the resulting manifest contains `linux/amd64` and
-`windows/amd64`.
+runs. A merged tag is updated only after the Linux build and every Windows
+variant succeed. The merge job verifies that the resulting manifest contains
+`linux/amd64` plus the expected number of distinct `windows/amd64` OS versions.
 
 The Linux build uses GitHub Actions caching and publishes provenance and SBOM
 attestations. The Windows build restores its previous platform image as a Docker

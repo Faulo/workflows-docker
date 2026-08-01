@@ -17,6 +17,11 @@ on:
                 required: false
                 default: "{}"
                 type: string
+            windows_variants:
+                description: JSON array of Windows tag suffixes and build arguments
+                required: false
+                default: '[{"tag":"windows","build_args":{}}]'
+                type: string
             linux_context:
                 description: Linux Docker build context
                 required: false
@@ -54,12 +59,18 @@ concurrency:
 
 jobs:
     docker-windows:
+        strategy:
+            fail-fast: false
+            matrix:
+                variant: ${{fromJSON(inputs.windows_variants)}}
         runs-on: windows-2022
         timeout-minutes: 180
         env:
             BUILD_ARGS: ${{inputs.build_args}}
             IMAGE: ${{secrets.DOCKERHUB_USERNAME}}/${{inputs.image}}
             IMAGE_TAG: ${{inputs.tag}}
+            VARIANT_BUILD_ARGS: ${{toJSON(matrix.variant.build_args)}}
+            VARIANT_TAG: ${{matrix.variant.tag}}
         steps:
             - name: Ensure Docker is running
               shell: pwsh
@@ -96,22 +107,37 @@ jobs:
             - name: Restore Windows image cache
               continue-on-error: true
               shell: pwsh
-              run: docker image pull "${env:IMAGE}:${env:IMAGE_TAG}-windows"
+              run: docker image pull "${env:IMAGE}:${env:IMAGE_TAG}-${env:VARIANT_TAG}"
             - name: Build Windows image
               shell: pwsh
               env:
                   BUILD_CONTEXT: ${{inputs.windows_context}}
                   DOCKERFILE: ${{inputs.windows_dockerfile}}
               run: |
-                  $arguments = $env:BUILD_ARGS | ConvertFrom-Json
-                  if ($arguments -isnot [PSCustomObject]) {
-                    throw "build_args must be a JSON object"
+                  if ($env:VARIANT_TAG -notmatch '^[A-Za-z0-9_][A-Za-z0-9_.-]*$') {
+                    throw "Invalid Windows variant tag: $env:VARIANT_TAG"
+                  }
+
+                  $argumentSets = @(
+                    @{ Name = 'build_args'; Value = $env:BUILD_ARGS },
+                    @{ Name = 'windows variant build_args'; Value = $env:VARIANT_BUILD_ARGS }
+                  )
+                  $arguments = [ordered]@{}
+                  foreach ($argumentSet in $argumentSets) {
+                    $values = $argumentSet.Value | ConvertFrom-Json
+                    if ($values -isnot [PSCustomObject]) {
+                      throw "$($argumentSet.Name) must be a JSON object"
+                    }
+
+                    foreach ($argument in $values.PSObject.Properties) {
+                      $arguments[$argument.Name] = $argument.Value
+                    }
                   }
 
                   $dockerBuildArgs = @()
-                  foreach ($argument in $arguments.PSObject.Properties) {
-                    if ($argument.Name -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') {
-                      throw "Invalid build argument name: $($argument.Name)"
+                  foreach ($argument in $arguments.GetEnumerator()) {
+                    if ($argument.Key -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') {
+                      throw "Invalid build argument name: $($argument.Key)"
                     }
 
                     $value = if ($argument.Value -is [string]) {
@@ -121,14 +147,14 @@ jobs:
                     }
 
                     $dockerBuildArgs += "--build-arg"
-                    $dockerBuildArgs += "$($argument.Name)=$value"
+                    $dockerBuildArgs += "$($argument.Key)=$value"
                   }
 
                   docker build --isolation=hyperv `
                     --pull `
-                    --cache-from "${env:IMAGE}:${env:IMAGE_TAG}-windows" `
+                    --cache-from "${env:IMAGE}:${env:IMAGE_TAG}-${env:VARIANT_TAG}" `
                     --file $env:DOCKERFILE `
-                    --tag "${env:IMAGE}:${env:IMAGE_TAG}-windows" `
+                    --tag "${env:IMAGE}:${env:IMAGE_TAG}-${env:VARIANT_TAG}" `
                     @dockerBuildArgs `
                     $env:BUILD_CONTEXT
 
@@ -137,7 +163,7 @@ jobs:
                   }
             - name: Push Windows image
               shell: pwsh
-              run: docker image push "${env:IMAGE}:${env:IMAGE_TAG}-windows"
+              run: docker image push "${env:IMAGE}:${env:IMAGE_TAG}-${env:VARIANT_TAG}"
 
     docker-linux:
         runs-on: ubuntu-24.04
@@ -195,6 +221,7 @@ jobs:
         env:
             IMAGE: ${{secrets.DOCKERHUB_USERNAME}}/${{inputs.image}}
             IMAGE_TAG: ${{inputs.tag}}
+            WINDOWS_VARIANTS: ${{inputs.windows_variants}}
         steps:
             - name: Set up Docker Buildx
               uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
@@ -206,16 +233,32 @@ jobs:
             - name: Merge manifests
               shell: bash
               run: |
+                  jq -e '
+                    type == "array" and length > 0 and
+                    all(.[].tag; type == "string" and test("^[A-Za-z0-9_][A-Za-z0-9_.-]*$")) and
+                    all(.[].build_args; type == "object") and
+                    ([.[].tag] | length == (unique | length))
+                  ' <<< "${WINDOWS_VARIANTS}" > /dev/null
+
+                  sources=("${IMAGE}:${IMAGE_TAG}-linux")
+                  while IFS= read -r variant_tag; do
+                    sources+=("${IMAGE}:${IMAGE_TAG}-${variant_tag}")
+                  done < <(jq -r '.[].tag' <<< "${WINDOWS_VARIANTS}")
+
                   docker buildx imagetools create \
                     --tag "${IMAGE}:${IMAGE_TAG}" \
-                    "${IMAGE}:${IMAGE_TAG}-linux" \
-                    "${IMAGE}:${IMAGE_TAG}-windows"
+                    "${sources[@]}"
             - name: Verify merged manifest
               shell: bash
               run: |
                   manifest="$(docker buildx imagetools inspect "${IMAGE}:${IMAGE_TAG}" --raw)"
-                  jq -e '
+                  expected_windows="$(jq 'length' <<< "${WINDOWS_VARIANTS}")"
+                  jq -e --argjson expected_windows "${expected_windows}" '
                     any(.manifests[]; .platform.os == "linux" and .platform.architecture == "amd64") and
-                    any(.manifests[]; .platform.os == "windows" and .platform.architecture == "amd64")
+                    ([.manifests[] |
+                      select(.platform.os == "windows" and .platform.architecture == "amd64") |
+                      .platform["os.version"]] as $windows_versions |
+                      ($windows_versions | length) == $expected_windows and
+                      ($windows_versions | unique | length) == $expected_windows)
                   ' <<< "${manifest}"
                   docker buildx imagetools inspect "${IMAGE}:${IMAGE_TAG}"
