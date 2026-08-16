@@ -280,3 +280,42 @@ jobs:
                       ($windows_versions | unique | length) == $expected_windows)
                   ' <<< "${manifest}"
                   docker buildx imagetools inspect "${IMAGE}:${IMAGE_TAG}"
+            - name: Delete temporary Windows manifest tags
+              if: ${{always()}}
+              shell: bash
+              env:
+                  DOCKERHUB_TOKEN: ${{secrets.DOCKERHUB_TOKEN}}
+                  DOCKERHUB_USERNAME: ${{secrets.DOCKERHUB_USERNAME}}
+                  DOCKERHUB_REPOSITORY: ${{inputs.image}}
+              run: |
+                  access_token="$(
+                    jq -n \
+                      --arg identifier "${DOCKERHUB_USERNAME}" \
+                      --arg secret "${DOCKERHUB_TOKEN}" \
+                      '{identifier: $identifier, secret: $secret}' |
+                      curl --fail-with-body --silent --show-error \
+                        --request POST \
+                        --header 'Content-Type: application/json' \
+                        --data-binary @- \
+                        https://hub.docker.com/v2/auth/token |
+                      jq -er '.access_token | select(type == "string" and length > 0)'
+                  )"
+
+                  namespace="$(jq -rn --arg value "${DOCKERHUB_USERNAME}" '$value | @uri')"
+                  encoded_repository="$(jq -rn --arg value "${DOCKERHUB_REPOSITORY}" '$value | @uri')"
+                  while IFS= read -r variant_tag; do
+                    helper_tag="${IMAGE_TAG}-${variant_tag}-manifest"
+                    encoded_tag="$(jq -rn --arg value "${helper_tag}" '$value | @uri')"
+                    status="$(
+                      curl --silent --show-error \
+                        --output /dev/null \
+                        --write-out '%{http_code}' \
+                        --request DELETE \
+                        --header "Authorization: Bearer ${access_token}" \
+                        "https://hub.docker.com/v2/namespaces/${namespace}/repositories/${encoded_repository}/tags/${encoded_tag}"
+                    )"
+                    if [[ "${status}" != 204 && "${status}" != 404 ]]; then
+                      echo "Failed to delete temporary tag ${helper_tag}: HTTP ${status}" >&2
+                      exit 1
+                    fi
+                  done < <(jq -r '.[].tag' <<< "${WINDOWS_VARIANTS}")

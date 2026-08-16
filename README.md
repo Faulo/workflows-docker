@@ -173,6 +173,8 @@ should also use workflow-level concurrency, as shown above, to queue consecutive
 runs. A merged tag is updated only after the Linux build and every Windows
 variant succeed. The merge job verifies that the resulting manifest contains
 `linux/amd64` plus the expected number of distinct `windows/amd64` OS versions.
+Temporary Windows manifest-wrapper tags used during the merge are deleted after
+the final manifest has been verified.
 
 The Linux build uses GitHub Actions caching and publishes provenance and SBOM
 attestations. The Windows build restores its previous platform image as a Docker
