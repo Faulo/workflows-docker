@@ -17,10 +17,20 @@ on:
                 required: false
                 default: "{}"
                 type: string
+            linux_platforms:
+                description: JSON array of Linux Docker platforms
+                required: false
+                default: '["linux/amd64"]'
+                type: string
             windows_variants:
                 description: JSON array of Windows tag suffixes and build arguments
                 required: false
                 default: '[{"tag":"windows","build_args":{}}]'
+                type: string
+            windows_platforms:
+                description: JSON array of Windows Docker platforms and runner labels
+                required: false
+                default: '[{"platform":"windows/amd64","runner":"windows-2022"}]'
                 type: string
             linux_context:
                 description: Linux Docker build context
@@ -63,14 +73,17 @@ jobs:
             fail-fast: false
             matrix:
                 variant: ${{fromJSON(inputs.windows_variants)}}
-        runs-on: windows-2022
+                target: ${{fromJSON(inputs.windows_platforms)}}
+        runs-on: ${{matrix.target.runner}}
         timeout-minutes: 180
         env:
             BUILD_ARGS: ${{inputs.build_args}}
             IMAGE: ${{secrets.DOCKERHUB_USERNAME}}/${{inputs.image}}
             IMAGE_TAG: ${{inputs.tag}}
+            PLATFORM: ${{matrix.target.platform}}
             VARIANT_BUILD_ARGS: ${{toJSON(matrix.variant.build_args)}}
             VARIANT_TAG: ${{matrix.variant.tag}}
+            WINDOWS_PLATFORMS: ${{inputs.windows_platforms}}
         steps:
             - name: Ensure Docker is running
               shell: pwsh
@@ -97,6 +110,21 @@ jobs:
                   }
 
                   docker version
+            - name: Prepare Windows target
+              shell: pwsh
+              run: |
+                  if ($env:PLATFORM -notmatch '^windows/(amd64|arm64)$') {
+                    throw "Invalid Windows platform: $env:PLATFORM"
+                  }
+
+                  $platforms = @($env:WINDOWS_PLATFORMS | ConvertFrom-Json)
+                  if ($platforms.Count -eq 0) {
+                    throw "windows_platforms must not be empty"
+                  }
+
+                  $architecture = $env:PLATFORM.Split('/')[1]
+                  $platformSuffix = if ($platforms.Count -gt 1) { "-$architecture" } else { "" }
+                  "TARGET_IMAGE=$($env:IMAGE):$($env:IMAGE_TAG)-$($env:VARIANT_TAG)$platformSuffix" >> $env:GITHUB_ENV
             - name: Checkout
               uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
             - name: Login to Docker Hub
@@ -107,7 +135,7 @@ jobs:
             - name: Restore Windows image cache
               continue-on-error: true
               shell: pwsh
-              run: docker image pull "${env:IMAGE}:${env:IMAGE_TAG}-${env:VARIANT_TAG}"
+              run: docker image pull $env:TARGET_IMAGE
             - name: Build Windows image
               shell: pwsh
               env:
@@ -151,10 +179,11 @@ jobs:
                   }
 
                   docker build --isolation=hyperv `
+                    --platform $env:PLATFORM `
                     --pull `
-                    --cache-from "${env:IMAGE}:${env:IMAGE_TAG}-${env:VARIANT_TAG}" `
+                    --cache-from $env:TARGET_IMAGE `
                     --file $env:DOCKERFILE `
-                    --tag "${env:IMAGE}:${env:IMAGE_TAG}-${env:VARIANT_TAG}" `
+                    --tag $env:TARGET_IMAGE `
                     @dockerBuildArgs `
                     $env:BUILD_CONTEXT
 
@@ -163,7 +192,7 @@ jobs:
                   }
             - name: Push Windows image
               shell: pwsh
-              run: docker image push "${env:IMAGE}:${env:IMAGE_TAG}-${env:VARIANT_TAG}"
+              run: docker image push $env:TARGET_IMAGE
 
     docker-linux:
         runs-on: ubuntu-24.04
@@ -172,6 +201,7 @@ jobs:
             BUILD_ARGS: ${{inputs.build_args}}
             IMAGE: ${{secrets.DOCKERHUB_USERNAME}}/${{inputs.image}}
             IMAGE_TAG: ${{inputs.tag}}
+            LINUX_PLATFORMS: ${{inputs.linux_platforms}}
         steps:
             - name: Checkout
               uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -197,6 +227,17 @@ jobs:
                     jq -r 'to_entries[] | "\(.key)=\(.value | tostring)"' <<< "${BUILD_ARGS}"
                     echo "${delimiter}"
                   } >> "${GITHUB_OUTPUT}"
+            - name: Prepare Linux platforms
+              id: platforms
+              shell: bash
+              run: |
+                  jq -e '
+                    type == "array" and length > 0 and
+                    all(.[]; type == "string" and test("^linux/(amd64|arm64)$")) and
+                    length == (unique | length)
+                  ' <<< "${LINUX_PLATFORMS}" > /dev/null
+
+                  echo "value=$(jq -r 'join(",")' <<< "${LINUX_PLATFORMS}")" >> "${GITHUB_OUTPUT}"
             - name: Build and push Linux image
               uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
               with:
@@ -205,7 +246,7 @@ jobs:
                   push: true
                   pull: true
                   tags: ${{env.IMAGE}}:${{env.IMAGE_TAG}}-linux
-                  platforms: linux/amd64
+                  platforms: ${{steps.platforms.outputs.value}}
                   build-args: ${{steps.build-args.outputs.value}}
                   cache-from: type=gha,scope=${{inputs.image}}-${{inputs.tag}}-linux
                   cache-to: type=gha,mode=max,scope=${{inputs.image}}-${{inputs.tag}}-linux
@@ -221,6 +262,8 @@ jobs:
         env:
             IMAGE: ${{secrets.DOCKERHUB_USERNAME}}/${{inputs.image}}
             IMAGE_TAG: ${{inputs.tag}}
+            LINUX_PLATFORMS: ${{inputs.linux_platforms}}
+            WINDOWS_PLATFORMS: ${{inputs.windows_platforms}}
             WINDOWS_VARIANTS: ${{inputs.windows_variants}}
         steps:
             - name: Set up Docker Buildx
@@ -240,13 +283,29 @@ jobs:
                     ([.[].tag] | length == (unique | length))
                   ' <<< "${WINDOWS_VARIANTS}" > /dev/null
 
+                  jq -e '
+                    type == "array" and length > 0 and
+                    all(.[];
+                      (.platform | type == "string" and test("^windows/(amd64|arm64)$")) and
+                      (.runner | type == "string" and length > 0)
+                    ) and
+                    ([.[].platform] | length == (unique | length))
+                  ' <<< "${WINDOWS_PLATFORMS}" > /dev/null
+
                   sources=("${IMAGE}:${IMAGE_TAG}-linux")
-                  while IFS= read -r variant_tag; do
-                    variant_image="${IMAGE}:${IMAGE_TAG}-${variant_tag}"
+                  platform_count="$(jq 'length' <<< "${WINDOWS_PLATFORMS}")"
+                  while IFS=$'\t' read -r variant_tag platform; do
+                    architecture="${platform#windows/}"
+                    platform_suffix=""
+                    if (( platform_count > 1 )); then
+                      platform_suffix="-${architecture}"
+                    fi
+
+                    variant_image="${IMAGE}:${IMAGE_TAG}-${variant_tag}${platform_suffix}"
                     variant_manifest="${variant_image}-manifest"
                     inspection="$(docker buildx imagetools inspect "${variant_image}" --format '{{json .}}')"
-                    os_version="$(jq -er '
-                      select(.image.os == "windows" and .image.architecture == "amd64") |
+                    os_version="$(jq -er --arg architecture "${architecture}" '
+                      select(.image.os == "windows" and .image.architecture == $architecture) |
                       .image["os.version"] |
                       select(type == "string" and length > 0)
                     ' <<< "${inspection}")"
@@ -256,11 +315,16 @@ jobs:
                       "${variant_manifest}" \
                       "${variant_image}" \
                       --os windows \
-                      --arch amd64 \
+                      --arch "${architecture}" \
                       --os-version "${os_version}"
                     docker manifest push "${variant_manifest}"
                     sources+=("${variant_manifest}")
-                  done < <(jq -r '.[].tag' <<< "${WINDOWS_VARIANTS}")
+                  done < <(
+                    jq -r \
+                      --argjson platforms "${WINDOWS_PLATFORMS}" \
+                      '.[] as $variant | $platforms[] | [$variant.tag, .platform] | @tsv' \
+                      <<< "${WINDOWS_VARIANTS}"
+                  )
 
                   docker buildx imagetools create \
                     --tag "${IMAGE}:${IMAGE_TAG}" \
@@ -269,15 +333,32 @@ jobs:
               shell: bash
               run: |
                   manifest="$(docker buildx imagetools inspect "${IMAGE}:${IMAGE_TAG}" --raw)"
-                  expected_windows="$(jq 'length' <<< "${WINDOWS_VARIANTS}")"
-                  jq -e --argjson expected_windows "${expected_windows}" '
-                    any(.manifests[]; .platform.os == "linux" and .platform.architecture == "amd64") and
-                    ([.manifests[] |
-                      select(.platform.os == "windows" and .platform.architecture == "amd64") |
-                      .platform["os.version"]] as $windows_versions |
-                      ($windows_versions | length) == $expected_windows and
-                      all($windows_versions[]; type == "string" and length > 0) and
-                      ($windows_versions | unique | length) == $expected_windows)
+                  jq -e \
+                    --argjson linux "${LINUX_PLATFORMS}" \
+                    --argjson windows "${WINDOWS_PLATFORMS}" \
+                    --argjson variants "${WINDOWS_VARIANTS}" '
+                    . as $manifest |
+                    all($linux[];
+                      split("/") as $expected |
+                      any($manifest.manifests[];
+                        .platform.os == $expected[0] and
+                        .platform.architecture == $expected[1]
+                      )
+                    ) and
+                    all($windows[].platform;
+                      split("/") as $expected |
+                      [
+                        $manifest.manifests[].platform |
+                        select(
+                          .os == $expected[0] and
+                          .architecture == $expected[1]
+                        ) |
+                        .["os.version"]
+                      ] as $versions |
+                      ($versions | length) == ($variants | length) and
+                      all($versions[]; type == "string" and length > 0) and
+                      ($versions | unique | length) == ($variants | length)
+                    )
                   ' <<< "${manifest}"
                   docker buildx imagetools inspect "${IMAGE}:${IMAGE_TAG}"
             - name: Delete temporary Windows manifest tags
@@ -303,8 +384,15 @@ jobs:
 
                   namespace="$(jq -rn --arg value "${DOCKERHUB_USERNAME}" '$value | @uri')"
                   encoded_repository="$(jq -rn --arg value "${DOCKERHUB_REPOSITORY}" '$value | @uri')"
-                  while IFS= read -r variant_tag; do
-                    helper_tag="${IMAGE_TAG}-${variant_tag}-manifest"
+                  platform_count="$(jq 'length' <<< "${WINDOWS_PLATFORMS}")"
+                  while IFS=$'\t' read -r variant_tag platform; do
+                    architecture="${platform#windows/}"
+                    platform_suffix=""
+                    if (( platform_count > 1 )); then
+                      platform_suffix="-${architecture}"
+                    fi
+
+                    helper_tag="${IMAGE_TAG}-${variant_tag}${platform_suffix}-manifest"
                     encoded_tag="$(jq -rn --arg value "${helper_tag}" '$value | @uri')"
                     status="$(
                       curl --silent --show-error \
@@ -318,4 +406,9 @@ jobs:
                       echo "Failed to delete temporary tag ${helper_tag}: HTTP ${status}" >&2
                       exit 1
                     fi
-                  done < <(jq -r '.[].tag' <<< "${WINDOWS_VARIANTS}")
+                  done < <(
+                    jq -r \
+                      --argjson platforms "${WINDOWS_PLATFORMS}" \
+                      '.[] as $variant | $platforms[] | [$variant.tag, .platform] | @tsv' \
+                      <<< "${WINDOWS_VARIANTS}"
+                  )

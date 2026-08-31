@@ -63,6 +63,7 @@ jobs:
             image: ${{needs.configuration.outputs.image}}
             tag: ${{matrix.variant.tag}}
             build_args: ${{toJSON(matrix.variant.build_args)}}
+            linux_platforms: '["linux/amd64","linux/arm64"]'
         secrets:
             DOCKERHUB_USERNAME: ${{secrets.DOCKERHUB_USERNAME}}
             DOCKERHUB_TOKEN: ${{secrets.DOCKERHUB_TOKEN}}
@@ -114,6 +115,33 @@ publish:
 This example publishes `latest-windows-1809` and `latest-windows-20H2`, then
 places both Windows manifests alongside `latest-linux` in `latest`.
 
+Linux architectures are built together by Buildx. Pass a JSON array through
+`linux_platforms` to publish more than the default `linux/amd64` platform:
+
+```yaml
+with:
+    image: example
+    linux_platforms: '["linux/amd64","linux/arm64"]'
+```
+
+Windows base variants and Windows architectures are independent dimensions.
+`windows_platforms` maps each Docker platform to the native runner that builds
+it; every platform is built for every entry in `windows_variants`:
+
+```yaml
+with:
+    image: example
+    windows_platforms: >-
+        [
+          {"platform":"windows/amd64","runner":"windows-2022"},
+          {"platform":"windows/arm64","runner":"windows-11-arm"}
+        ]
+```
+
+When several Windows platforms are requested, their intermediate tags include
+the architecture, for example `latest-windows-amd64` and
+`latest-windows-arm64`. The final merged tag contains both manifests.
+
 ## Requirements
 
 The calling repository must define these GitHub Actions secrets:
@@ -135,8 +163,10 @@ linux/Dockerfile
 windows/Dockerfile
 ```
 
-The Linux image is built for `linux/amd64`. The Windows Dockerfile must build on
-the GitHub-hosted `windows-2022` runner using Hyper-V isolation.
+The Linux image is built for `linux/amd64` by default. The default Windows
+platform is `windows/amd64`, built on the GitHub-hosted `windows-2022` runner
+using Hyper-V isolation. Additional Windows targets require a native runner
+with a working Windows Docker daemon.
 
 Build argument names must be valid Docker `ARG` identifiers. Values should be
 JSON scalars; strings are recommended.
@@ -148,7 +178,9 @@ JSON scalars; strings are recommended.
 | `image` | yes | none | Docker Hub repository name without the namespace |
 | `tag` | no | `latest` | Tag for the merged image |
 | `build_args` | no | `{}` | JSON object containing Docker build arguments |
+| `linux_platforms` | no | `["linux/amd64"]` | Unique JSON array of Linux Docker platforms |
 | `windows_variants` | no | `[{"tag":"windows","build_args":{}}]` | JSON array of Windows tag suffixes and variant-specific build arguments |
+| `windows_platforms` | no | `[{"platform":"windows/amd64","runner":"windows-2022"}]` | Unique JSON array mapping Windows Docker platforms to native runner labels |
 | `linux_context` | no | `linux` | Linux build context |
 | `linux_dockerfile` | no | `linux/Dockerfile` | Linux Dockerfile path |
 | `windows_context` | no | `windows` | Windows build context |
@@ -172,7 +204,8 @@ Publication is serialized per calling repository and tag. Calling workflows
 should also use workflow-level concurrency, as shown above, to queue consecutive
 runs. A merged tag is updated only after the Linux build and every Windows
 variant succeed. The merge job verifies that the resulting manifest contains
-`linux/amd64` plus the expected number of distinct `windows/amd64` OS versions.
+every requested Linux platform plus every requested Windows architecture and
+the expected number of distinct Windows OS versions for each architecture.
 Temporary Windows manifest-wrapper tags used during the merge are deleted after
 the final manifest has been verified.
 
