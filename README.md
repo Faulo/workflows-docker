@@ -63,7 +63,11 @@ jobs:
             image: ${{needs.configuration.outputs.image}}
             tag: ${{matrix.variant.tag}}
             build_args: ${{toJSON(matrix.variant.build_args)}}
-            linux_platforms: '["linux/amd64","linux/arm64"]'
+            linux_platforms: >-
+                {
+                  "linux/amd64":"ubuntu-24.04",
+                  "linux/arm64":"ubuntu-24.04-arm"
+                }
         secrets:
             DOCKERHUB_USERNAME: ${{secrets.DOCKERHUB_USERNAME}}
             DOCKERHUB_TOKEN: ${{secrets.DOCKERHUB_TOKEN}}
@@ -73,7 +77,8 @@ Each matrix entry runs a Linux build and a Windows build in parallel. Given
 `DOCKER_IMAGE=farah` in `.env` and `tag: 8.2`, the workflow publishes:
 
 ```text
-<DOCKERHUB_USERNAME>/farah:8.2-linux
+<DOCKERHUB_USERNAME>/farah:8.2-linux-amd64
+<DOCKERHUB_USERNAME>/farah:8.2-linux-arm64
 <DOCKERHUB_USERNAME>/farah:8.2-windows
 <DOCKERHUB_USERNAME>/farah:8.2
 ```
@@ -115,32 +120,33 @@ publish:
 This example publishes `latest-windows-1809` and `latest-windows-20H2`, then
 places both Windows manifests alongside `latest-linux` in `latest`.
 
-Linux architectures are built together by Buildx. Pass a JSON array through
+Platform inputs are JSON objects mapping each Docker platform to the native
+GitHub Actions runner that builds it. Pass multiple entries through
 `linux_platforms` to publish more than the default `linux/amd64` platform:
 
 ```yaml
 with:
     image: example
-    linux_platforms: '["linux/amd64","linux/arm64"]'
+    linux_platforms: >-
+        {
+          "linux/amd64":"ubuntu-24.04",
+          "linux/arm64":"ubuntu-24.04-arm"
+        }
 ```
 
-Windows base variants and Windows architectures are independent dimensions.
-`windows_platforms` maps each Docker platform to the native runner that builds
-it; every platform is built for every entry in `windows_variants`:
+Windows base variants and platforms are independent dimensions. Every platform
+in `windows_platforms` is built for every entry in `windows_variants`. Microsoft
+currently publishes Windows container base images for amd64 only:
 
 ```yaml
 with:
     image: example
-    windows_platforms: >-
-        [
-          {"platform":"windows/amd64","runner":"windows-2022"},
-          {"platform":"windows/arm64","runner":"windows-11-arm"}
-        ]
+    windows_platforms: '{"windows/amd64":"windows-2022"}'
 ```
 
-When several Windows platforms are requested, their intermediate tags include
-the architecture, for example `latest-windows-amd64` and
-`latest-windows-arm64`. The final merged tag contains both manifests.
+Linux platform tags include the architecture when several targets are requested,
+for example `latest-linux-amd64` and `latest-linux-arm64`. With only one target,
+the architecture suffix is omitted for backward compatibility.
 
 ## Requirements
 
@@ -163,10 +169,10 @@ linux/Dockerfile
 windows/Dockerfile
 ```
 
-The Linux image is built for `linux/amd64` by default. The default Windows
-platform is `windows/amd64`, built on the GitHub-hosted `windows-2022` runner
-using Hyper-V isolation. Additional Windows targets require a native runner
-with a working Windows Docker daemon.
+The Linux image is built for `linux/amd64` on `ubuntu-24.04` by default. The
+default Windows platform is `windows/amd64`, built on the GitHub-hosted
+`windows-2022` runner using Hyper-V isolation. Each additional target requires
+a native runner with a working Docker daemon.
 
 Build argument names must be valid Docker `ARG` identifiers. Values should be
 JSON scalars; strings are recommended.
@@ -178,9 +184,9 @@ JSON scalars; strings are recommended.
 | `image` | yes | none | Docker Hub repository name without the namespace |
 | `tag` | no | `latest` | Tag for the merged image |
 | `build_args` | no | `{}` | JSON object containing Docker build arguments |
-| `linux_platforms` | no | `["linux/amd64"]` | Unique JSON array of Linux Docker platforms |
+| `linux_platforms` | no | `{"linux/amd64":"ubuntu-24.04"}` | JSON object mapping Linux Docker platforms to native runner labels |
 | `windows_variants` | no | `[{"tag":"windows","build_args":{}}]` | JSON array of Windows tag suffixes and variant-specific build arguments |
-| `windows_platforms` | no | `[{"platform":"windows/amd64","runner":"windows-2022"}]` | Unique JSON array mapping Windows Docker platforms to native runner labels |
+| `windows_platforms` | no | `{"windows/amd64":"windows-2022"}` | JSON object mapping the Windows amd64 Docker platform to its native runner label |
 | `linux_context` | no | `linux` | Linux build context |
 | `linux_dockerfile` | no | `linux/Dockerfile` | Linux Dockerfile path |
 | `windows_context` | no | `windows` | Windows build context |
@@ -209,9 +215,9 @@ the expected number of distinct Windows OS versions for each architecture.
 Temporary Windows manifest-wrapper tags used during the merge are deleted after
 the final manifest has been verified.
 
-The Linux build uses GitHub Actions caching and publishes provenance and SBOM
-attestations. The Windows build restores its previous platform image as a Docker
-layer cache.
+Linux targets build independently on their configured native runners, use
+GitHub Actions caching, and publish provenance and SBOM attestations. The
+Windows build restores its previous platform image as a Docker layer cache.
 
 ## Versioning
 
