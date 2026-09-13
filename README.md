@@ -54,6 +54,7 @@ jobs:
                           PHP_VERSION: "8.2"
                           DEBIAN: bookworm
                     - tag: "8.3"
+                      latest: true
                       build_args:
                           PHP_VERSION: "8.3"
                           DEBIAN: bookworm
@@ -62,6 +63,7 @@ jobs:
         with:
             image: ${{needs.configuration.outputs.image}}
             tag: ${{matrix.variant.tag}}
+            latest: ${{matrix.variant.latest || false}}
             build_args: ${{toJSON(matrix.variant.build_args)}}
             linux_platforms: >-
                 {
@@ -72,6 +74,10 @@ jobs:
             DOCKERHUB_USERNAME: ${{secrets.DOCKERHUB_USERNAME}}
             DOCKERHUB_TOKEN: ${{secrets.DOCKERHUB_TOKEN}}
 ```
+
+Setting `latest` on the final matrix entry applies both merged tags in the same
+publication operation. In this example, `8.3` and `latest` therefore reference
+the exact same multi-platform image without running a second image build.
 
 Each matrix entry runs a Linux build and a Windows build in parallel. Given
 `DOCKER_IMAGE=farah` in `.env` and `tag: 8.2`, the workflow publishes:
@@ -183,6 +189,7 @@ JSON scalars; strings are recommended.
 | --- | --- | --- | --- |
 | `image` | yes | none | Docker Hub repository name without the namespace |
 | `tag` | no | `latest` | Tag for the merged image |
+| `latest` | no | `false` | Also apply the `latest` tag to the same merged image |
 | `build_args` | no | `{}` | JSON object containing Docker build arguments |
 | `linux_platforms` | no | `{"linux/amd64":"ubuntu-24.04"}` | JSON object mapping Linux Docker platforms to native runner labels |
 | `windows_variants` | no | `[{"tag":"windows","build_args":{}}]` | JSON array of Windows tag suffixes and variant-specific build arguments |
@@ -209,7 +216,9 @@ with:
 Publication is serialized per calling repository and tag. Calling workflows
 should also use workflow-level concurrency, as shown above, to queue consecutive
 runs. A merged tag is updated only after the Linux build and every Windows
-variant succeed. The merge job verifies that the resulting manifest contains
+variant succeed. When `latest` is enabled, the primary and `latest` tags are
+applied by the same merge operation and verified to contain the same manifest.
+The merge job also verifies that the resulting manifest contains
 every requested Linux platform plus every requested Windows architecture and
 the expected number of distinct Windows OS versions for each architecture.
 Temporary Windows manifest-wrapper tags used during the merge are deleted after

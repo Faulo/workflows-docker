@@ -12,6 +12,11 @@ on:
                 required: false
                 default: latest
                 type: string
+            latest:
+                description: Also tag the merged multi-platform image as latest
+                required: false
+                default: false
+                type: boolean
             build_args:
                 description: JSON object containing Docker build arguments
                 required: false
@@ -308,6 +313,7 @@ jobs:
             IMAGE: ${{secrets.DOCKERHUB_USERNAME}}/${{inputs.image}}
             IMAGE_TAG: ${{inputs.tag}}
             LINUX_PLATFORMS: ${{inputs.linux_platforms}}
+            PUBLISH_LATEST: ${{inputs.latest}}
             WINDOWS_PLATFORMS: ${{inputs.windows_platforms}}
             WINDOWS_VARIANTS: ${{inputs.windows_variants}}
         steps:
@@ -373,9 +379,12 @@ jobs:
                       <<< "${WINDOWS_VARIANTS}"
                   )
 
-                  docker buildx imagetools create \
-                    --tag "${IMAGE}:${IMAGE_TAG}" \
-                    "${sources[@]}"
+                  tags=(--tag "${IMAGE}:${IMAGE_TAG}")
+                  if [[ "${PUBLISH_LATEST}" == true && "${IMAGE_TAG}" != latest ]]; then
+                    tags+=(--tag "${IMAGE}:latest")
+                  fi
+
+                  docker buildx imagetools create "${tags[@]}" "${sources[@]}"
             - name: Verify merged manifest
               shell: bash
               run: |
@@ -407,6 +416,15 @@ jobs:
                       ($versions | unique | length) == ($variants | length)
                     )
                   ' <<< "${manifest}"
+
+                  if [[ "${PUBLISH_LATEST}" == true ]]; then
+                    latest_manifest="$(docker buildx imagetools inspect "${IMAGE}:latest" --raw)"
+                    if [[ "${latest_manifest}" != "${manifest}" ]]; then
+                      echo "${IMAGE}:${IMAGE_TAG} and ${IMAGE}:latest do not reference the same manifest" >&2
+                      exit 1
+                    fi
+                  fi
+
                   docker buildx imagetools inspect "${IMAGE}:${IMAGE_TAG}"
             - name: Delete temporary Windows manifest tags
               if: ${{always()}}
