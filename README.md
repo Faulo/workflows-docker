@@ -85,6 +85,7 @@ Each matrix entry runs a Linux build and a Windows build in parallel. Given
 ```text
 <DOCKERHUB_USERNAME>/farah:8.2-linux-amd64
 <DOCKERHUB_USERNAME>/farah:8.2-linux-arm64
+<DOCKERHUB_USERNAME>/farah:8.2-linux
 <DOCKERHUB_USERNAME>/farah:8.2-windows
 <DOCKERHUB_USERNAME>/farah:8.2
 ```
@@ -123,8 +124,9 @@ publish:
         DOCKERHUB_TOKEN: ${{secrets.DOCKERHUB_TOKEN}}
 ```
 
-This example publishes `latest-windows-1809` and `latest-windows-20H2`, then
-places both Windows manifests alongside `latest-linux` in `latest`.
+This example publishes `latest-windows-1809` and `latest-windows-20H2`, combines
+both in `latest-windows`, then places that Windows platform set alongside
+`latest-linux` in `latest`.
 
 Platform inputs are JSON objects mapping each Docker platform to the native
 GitHub Actions runner that builds it. Pass multiple entries through
@@ -151,8 +153,9 @@ with:
 ```
 
 Linux platform tags include the architecture when several targets are requested,
-for example `latest-linux-amd64` and `latest-linux-arm64`. With only one target,
-the architecture suffix is omitted for backward compatibility.
+for example `latest-linux-amd64` and `latest-linux-arm64`, and are combined in
+`latest-linux`. With only one target, the architecture suffix is omitted and the
+platform image itself is the `latest-linux` compatibility tag.
 
 ## Requirements
 
@@ -218,9 +221,12 @@ should also use workflow-level concurrency, as shown above, to queue consecutive
 runs. A merged tag is updated only after the Linux build and every Windows
 variant succeed. When `latest` is enabled, the primary and `latest` tags are
 applied by the same merge operation and verified to contain the same manifest.
-The merge job also verifies that the resulting manifest contains
-every requested Linux platform plus every requested Windows architecture and
-the expected number of distinct Windows OS versions for each architecture.
+Every publication also produces `<tag>-linux`, `<tag>-windows`, and
+`<tag>-<windows-variant>` compatibility tags. When `latest` is enabled for a
+different primary tag, the equivalent `latest-*` aliases are published without
+rebuilding the images. The merge job also verifies that the resulting manifest
+contains every requested Linux platform plus every requested Windows architecture
+and the expected number of distinct Windows OS versions for each architecture.
 Temporary Windows manifest-wrapper tags used during the merge are deleted after
 the final manifest has been verified.
 

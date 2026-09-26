@@ -335,6 +335,7 @@ jobs:
                   ' <<< "${WINDOWS_VARIANTS}" > /dev/null
 
                   sources=()
+                  linux_sources=()
                   linux_platform_count="$(jq 'length' <<< "${LINUX_PLATFORMS}")"
                   while IFS= read -r platform; do
                     architecture="${platform#linux/}"
@@ -343,9 +344,12 @@ jobs:
                       platform_suffix="-${architecture}"
                     fi
 
-                    sources+=("${IMAGE}:${IMAGE_TAG}-linux${platform_suffix}")
+                    linux_source="${IMAGE}:${IMAGE_TAG}-linux${platform_suffix}"
+                    linux_sources+=("${linux_source}")
+                    sources+=("${linux_source}")
                   done < <(jq -r 'keys[]' <<< "${LINUX_PLATFORMS}")
 
+                  windows_sources=()
                   platform_count="$(jq 'length' <<< "${WINDOWS_PLATFORMS}")"
                   while IFS=$'\t' read -r variant_tag platform; do
                     architecture="${platform#windows/}"
@@ -371,6 +375,7 @@ jobs:
                       --arch "${architecture}" \
                       --os-version "${os_version}"
                     docker manifest push "${variant_manifest}"
+                    windows_sources+=("${variant_manifest}")
                     sources+=("${variant_manifest}")
                   done < <(
                     jq -r \
@@ -385,6 +390,34 @@ jobs:
                   fi
 
                   docker buildx imagetools create "${tags[@]}" "${sources[@]}"
+
+                  linux_tags=()
+                  linux_image="${IMAGE}:${IMAGE_TAG}-linux"
+                  if (( ${#linux_sources[@]} != 1 )) || [[ "${linux_sources[0]}" != "${linux_image}" ]]; then
+                    linux_tags+=(--tag "${linux_image}")
+                  fi
+                  if [[ "${PUBLISH_LATEST}" == true && "${IMAGE_TAG}" != latest ]]; then
+                    linux_tags+=(--tag "${IMAGE}:latest-linux")
+                  fi
+                  if (( ${#linux_tags[@]} > 0 )); then
+                    docker buildx imagetools create "${linux_tags[@]}" "${linux_sources[@]}"
+                  fi
+
+                  windows_tags=(--tag "${IMAGE}:${IMAGE_TAG}-windows")
+                  if [[ "${PUBLISH_LATEST}" == true && "${IMAGE_TAG}" != latest ]]; then
+                    windows_tags+=(--tag "${IMAGE}:latest-windows")
+                  fi
+                  docker buildx imagetools create "${windows_tags[@]}" "${windows_sources[@]}"
+
+                  if [[ "${PUBLISH_LATEST}" == true && "${IMAGE_TAG}" != latest ]]; then
+                    while IFS= read -r variant_tag; do
+                      if [[ "${variant_tag}" != windows ]]; then
+                        docker buildx imagetools create \
+                          --tag "${IMAGE}:latest-${variant_tag}" \
+                          "${IMAGE}:${IMAGE_TAG}-${variant_tag}"
+                      fi
+                    done < <(jq -r '.[].tag' <<< "${WINDOWS_VARIANTS}")
+                  fi
             - name: Verify merged manifest
               shell: bash
               run: |
@@ -426,6 +459,19 @@ jobs:
                   fi
 
                   docker buildx imagetools inspect "${IMAGE}:${IMAGE_TAG}"
+                  docker buildx imagetools inspect "${IMAGE}:${IMAGE_TAG}-linux"
+                  docker buildx imagetools inspect "${IMAGE}:${IMAGE_TAG}-windows"
+                  while IFS= read -r variant_tag; do
+                    docker buildx imagetools inspect "${IMAGE}:${IMAGE_TAG}-${variant_tag}"
+                  done < <(jq -r '.[].tag' <<< "${WINDOWS_VARIANTS}")
+
+                  if [[ "${PUBLISH_LATEST}" == true && "${IMAGE_TAG}" != latest ]]; then
+                    docker buildx imagetools inspect "${IMAGE}:latest-linux"
+                    docker buildx imagetools inspect "${IMAGE}:latest-windows"
+                    while IFS= read -r variant_tag; do
+                      docker buildx imagetools inspect "${IMAGE}:latest-${variant_tag}"
+                    done < <(jq -r '.[].tag' <<< "${WINDOWS_VARIANTS}")
+                  fi
             - name: Delete temporary Windows manifest tags
               if: ${{always()}}
               shell: bash
