@@ -5,15 +5,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Historical entries were reconstructed from Git history. Dates use annotated tag
-timestamps where available and tagged commit dates for lightweight tags. The
-moving `v1` and `v2` tags are release aliases and have no separate entries.
-
 ## [Unreleased]
 
 ### Added
 
-- Weekly Dependabot updates for SHA-pinned GitHub Actions, grouped into one pull
+- Monthly Dependabot updates for SHA-pinned GitHub Actions, grouped into one pull
   request.
 - Pull request validation using the eight unpublished example images.
 - This changelog, covering all published versioned tags.
@@ -23,10 +19,6 @@ moving `v1` and `v2` tags are release aliases and have no separate entries.
 - Document the public workflow interface with generic examples and an explicit
   workflow input reference.
 - Use generic configurations in planner and builder tests.
-
-### Removed
-
-- Project-specific configuration examples and references to external consumers.
 
 ## [2.1.0] - 2026-10-10
 
