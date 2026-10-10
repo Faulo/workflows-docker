@@ -38,7 +38,9 @@ class WindowsBuildTests(unittest.TestCase):
             if args[:2] == ("image", "inspect"):
                 output = json.dumps([inspection])
             elif args[:2] == ("image", "push"):
-                output = push_output
+                output = "The push refers to repository [example/app]"
+            elif args[:2] == ("manifest", "inspect"):
+                output = json.dumps({"Descriptor": {"digest": push_output}})
             return SimpleNamespace(returncode=0, stdout=output)
 
         environment = {
@@ -58,12 +60,16 @@ class WindowsBuildTests(unittest.TestCase):
 
     def test_cached_image_with_index_and_image_digests_records_pushed_digest(self):
         with tempfile.TemporaryDirectory() as directory:
-            docker = self.run_build(directory, IMAGE_DIGEST + "\n")
+            docker = self.run_build(directory, IMAGE_DIGEST)
             record = json.loads((Path(directory) / "b000.json").read_text())
             self.assertEqual(IMAGE_DIGEST, record["digest"])
             self.assertEqual("10.0.17763.1", record["platform"]["os.version"])
             docker.assert_any_call(
-                "image", "push", "--quiet", "example/app:wf-v3-123-1-b000", capture=True
+                "manifest",
+                "inspect",
+                "--verbose",
+                "example/app:wf-v3-123-1-b000",
+                capture=True,
             )
             docker.assert_any_call(
                 "image", "pull", "example/app:latest-ltsc2019", check=False

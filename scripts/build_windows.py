@@ -78,12 +78,16 @@ def main(use_local_cache=False):
         f"Unexpected Windows image OS version: {version}",
     )
     # A cached image can retain an index digest as well as its image digest.
-    digest = docker(
-        "image", "push", "--quiet", target_image, capture=True
-    ).stdout.strip()
+    docker("image", "push", target_image)
+    manifest = json.loads(
+        docker("manifest", "inspect", "--verbose", target_image, capture=True).stdout
+    )
+    require(isinstance(manifest, dict), "Windows staging tag must resolve to one image")
+    digest = manifest.get("Descriptor", {}).get("digest", "")
     require(
-        re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is not None,
-        "Windows push must return an immutable image digest",
+        isinstance(digest, str)
+        and re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is not None,
+        "Windows staging manifest must have an immutable image digest",
     )
     print(f"Pushed {target_image}@{digest}")
     write_json(

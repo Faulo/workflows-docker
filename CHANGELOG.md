@@ -7,14 +7,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-10-10
+
+### Fixed
+
+- Resolve the Windows staging digest from the pushed registry tag. Docker's quiet
+  push output is an image reference, and cached images can retain both an image
+  digest and a product-index digest locally.
+
 ## [3.0.0] - 2026-10-10
 
 ### Fixed
 
 - Record the immutable digest returned by a Windows image push when cached images
   retain both image and index repository digests.
-- Record the Windows staging digest returned by the push rather than rejecting
-  cached images that retain both an image digest and a product-index digest.
 - Record large Linux Bake metadata without exceeding the operating system's
   environment-variable size limit.
 
