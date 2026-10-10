@@ -183,18 +183,37 @@ tag as a best-effort cache across runs and push to run-specific staging tags.
 Final-image caching does not retain separate compiler stages across fresh runners.
 Windows platform metadata and a nonempty OS version are checked before pushing.
 
-The optional workflow input `windows-builder: buildkit` enables experimental
-Windows Bake builds using an isolated containerd instance, CNI networking, and
-BuildKit v0.34.0 with Hyper-V isolation. It leaves the runner's Docker service
-intact. Windows BuildKit images publish by digest without attestations; their
-actual OS version is obtained from the resulting registry image configuration.
-The default `classic` builder remains available for Dockerfiles requiring it.
+Windows builds use the existing Docker service supplied by `windows-latest`.
+The workflow starts that service if needed and uses classic `docker build` with
+Hyper-V isolation. It does not install containerd, BuildKit, or networking plugins.
 
 For builder validation, workflow input `publish: false` builds disposable `tmp/`
-images and skips image pushes, public tag updates, and publication cleanup. Bake
+images and skips registry login, image pushes, public tag updates, and publication cleanup. Bake
 exports local OCI archives and verifies their platform metadata. Classic Windows
-builds retain local images and verify their metadata. This validates image
+builds retain local images and verify their metadata. Both paths upload metadata
+records, including labels for unpublished builds. No registry secrets are needed
+when publication is disabled. Publication still requires both Docker Hub secrets.
+This validates image
 construction; project tests continue to run outside this pipeline.
+
+## Unpublished workflow fixture
+
+[examples/test-image](examples/test-image) contains a small image with a shared
+`AS build` stage and two product tags, `1.0` and `2.0`. Each tag builds Linux
+amd64, Linux arm64, Windows LTSC 2019, and Windows LTSC 2022: eight images in four
+target jobs. Linux uses Alpine; Windows uses NanoServer on `windows-latest`.
+The fixture exercises an explicit configuration path, dotenv substitution,
+global/variant/target build arguments, native architectures, shared stages, and
+Windows release selection.
+
+Run the **Test image** workflow manually, or push changes to its tracked workflow,
+scripts, or fixture paths. It calls the same reusable workflow with
+`publish: false`, without registry secrets. A final verification job checks all
+eight metadata records, their native platforms, Windows OS versions, and labels
+carrying the selected variant and substituted arguments. Images remain on the
+disposable runners; only metadata and build diagnostics become artifacts.
+Registry publication and manifest assembly remain covered separately by the
+publisher tests.
 
 Build results and the publication plan are passed between jobs as short-lived
 artifacts. All configured builds must succeed before public tags move. The

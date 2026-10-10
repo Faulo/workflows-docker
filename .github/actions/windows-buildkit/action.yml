@@ -1,7 +1,0 @@
-name: Windows BuildKit
-description: Start isolated WCOW builder services and stop them after dependent actions finish
-runs:
-  using: node24
-  main: main.js
-  post: post.js
-  post-if: always()

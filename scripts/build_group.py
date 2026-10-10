@@ -22,7 +22,10 @@ def bake_definition(
     plan, group_id, platform, publish=True, source="source", output="bake"
 ):
     group, builds = group_builds(plan, group_id)
-    windows = platform == "windows/amd64"
+    require(
+        platform in ("linux/amd64", "linux/arm64"),
+        "Bake builds require a native Linux runner",
+    )
     scopes = [f"v2-{build['variant']}-{build['target']}" for build in builds]
     targets = {}
     for build, scope in zip(builds, scopes):
@@ -43,9 +46,7 @@ def bake_definition(
             # distinct owners, so parallel builds cannot overwrite each other.
             "cache-from": [f"type=gha,scope={item}" for item in scopes],
             "cache-to": [f"type=gha,mode=max,scope={scope}"],
-            "attest": ["type=provenance,disabled=true", "type=sbom,disabled=true"]
-            if windows
-            else ["type=provenance,mode=max", "type=sbom"],
+            "attest": ["type=provenance,mode=max", "type=sbom"],
             "output": [
                 "type=image,push-by-digest=true,name-canonical=true,push=true"
                 if publish
@@ -53,24 +54,6 @@ def bake_definition(
             ],
         }
     return {"group": {"default": {"targets": group["builds"]}}, "target": targets}
-
-
-def registry_config(image, digest):
-    result = subprocess.run(
-        [
-            "docker",
-            "buildx",
-            "imagetools",
-            "inspect",
-            f"{image}@{digest}",
-            "--format",
-            "{{json .Image}}",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return json.loads(result.stdout)
 
 
 def oci_config(path):
@@ -95,6 +78,28 @@ def oci_config(path):
         return blob(index["config"]["digest"])
 
 
+def local_result(build, digest, platform, config):
+    expected = dict(zip(("os", "architecture"), platform.split("/")))
+    require(
+        all(config.get(key) == value for key, value in expected.items()),
+        f"Unexpected platform for {build['id']}",
+    )
+    if expected["os"] == "windows":
+        version = config.get("os.version")
+        require(
+            isinstance(version, str) and bool(version),
+            f"Missing Windows OS version for {build['id']}",
+        )
+        expected["os.version"] = version
+    return {
+        "id": build["id"],
+        "digest": digest,
+        "platform": expected,
+        "local": True,
+        "labels": config.get("config", {}).get("Labels") or {},
+    }
+
+
 def record_results(
     plan,
     group_id,
@@ -103,7 +108,6 @@ def record_results(
     directory,
     publish=True,
     output="bake",
-    inspect=registry_config,
 ):
     _, builds = group_builds(plan, group_id)
     for build in builds:
@@ -113,26 +117,14 @@ def record_results(
             f"Missing Bake digest for {build['variant']} / {build['target']}",
         )
         expected = dict(zip(("os", "architecture"), platform.split("/")))
-        if not publish or expected["os"] == "windows":
-            config = (
-                inspect(plan["reference"], digest)
-                if publish
-                else oci_config(Path(output) / f"{build['id']}.tar")
+        record = {"id": build["id"], "digest": digest, "platform": expected}
+        if not publish:
+            record = local_result(
+                build, digest, platform, oci_config(Path(output) / f"{build['id']}.tar")
             )
-            require(
-                all(config.get(key) == value for key, value in expected.items()),
-                f"Unexpected platform for {build['id']}",
-            )
-            if expected["os"] == "windows":
-                version = config.get("os.version")
-                require(
-                    isinstance(version, str) and bool(version),
-                    f"Missing Windows OS version for {build['id']}",
-                )
-                expected["os.version"] = version
         write_json(
             Path(directory) / f"{build['id']}.json",
-            {"id": build["id"], "digest": digest, "platform": expected},
+            record,
         )
         print(
             f"Built {build['target']} × {build['variant']}: {digest} ({expected})",
@@ -162,56 +154,22 @@ def classic(plan, group_id, platform, directory, publish=True):
                 config = json.loads(
                     build_windows.docker("image", "inspect", image, capture=True).stdout
                 )[0]
-                require(
-                    config["Os"] == "windows"
-                    and config["Architecture"] == "amd64"
-                    and config.get("OsVersion"),
-                    "Invalid Windows trial image metadata",
+                record = local_result(
+                    build,
+                    config["Id"],
+                    platform,
+                    {
+                        "os": config["Os"],
+                        "architecture": config["Architecture"],
+                        "os.version": config.get("OsVersion"),
+                        "config": config.get("Config", {}),
+                    },
                 )
-        except (subprocess.CalledProcessError, ValueError) as error:
-            failed.append(build["id"])
-            print(
-                f"::error::{build['target']} × {build['variant']}: {error}", flush=True
-            )
-        finally:
-            print("::endgroup::", flush=True)
-    require(not failed, f"Required builds failed: {', '.join(failed)}")
-
-
-def windows_bake(plan, group_id, platform, directory, publish=True, output="bake"):
-    group, builds = group_builds(plan, group_id)
-    failed = []
-    for build in builds:
-        print(f"::group::{build['target']} × {build['variant']}", flush=True)
-        metadata_path = Path(output) / f"{build['id']}-metadata.json"
-        try:
-            subprocess.run(
-                [
-                    "docker",
-                    "--context",
-                    "default",
-                    "buildx",
-                    "bake",
-                    "--file",
-                    str(Path(output) / "docker-bake.json"),
-                    "--progress",
-                    "plain",
-                    "--metadata-file",
-                    str(metadata_path),
-                    build["id"],
-                ],
-                check=True,
-            )
-            single_plan = {**plan, "groups": [{**group, "builds": [build["id"]]}]}
-            record_results(
-                single_plan,
-                group_id,
-                platform,
-                json.loads(metadata_path.read_text(encoding="utf-8")),
-                directory,
-                publish,
-                output,
-            )
+                write_json(Path(directory) / f"{build['id']}.json", record)
+                print(
+                    f"Built {build['target']} × {build['variant']}: {record['digest']} ({record['platform']})",
+                    flush=True,
+                )
         except (subprocess.CalledProcessError, ValueError) as error:
             failed.append(build["id"])
             print(
@@ -224,9 +182,7 @@ def windows_bake(plan, group_id, platform, directory, publish=True, output="bake
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "command", choices=["prepare", "record", "classic", "windows-bake"]
-    )
+    parser.add_argument("command", choices=["prepare", "record", "classic"])
     parser.add_argument("--plan", required=True)
     parser.add_argument("--group", required=True)
     parser.add_argument("--platform", required=True)
@@ -258,12 +214,8 @@ def main():
             publish,
             args.output,
         )
-    elif args.command == "classic":
-        classic(plan, args.group, args.platform, args.directory, publish)
     else:
-        windows_bake(
-            plan, args.group, args.platform, args.directory, publish, args.output
-        )
+        classic(plan, args.group, args.platform, args.directory, publish)
 
 
 if __name__ == "__main__":

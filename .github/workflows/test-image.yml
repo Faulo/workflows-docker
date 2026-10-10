@@ -1,0 +1,39 @@
+name: Test image
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/docker.yml
+      - .github/workflows/test-image.yml
+      - scripts/**
+      - examples/test-image/**
+
+permissions:
+  contents: read
+
+jobs:
+  docker:
+    uses: ./.github/workflows/docker.yml
+    with:
+      config: examples/test-image/docker.json
+      publish: false
+
+  verify:
+    needs: docker
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: docker-v2-plan
+          path: plan
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: docker-v2-record-*
+          merge-multiple: true
+          path: records
+      - name: Verify all eight images
+        run: python scripts/verify_test_image.py --plan plan/plan.json --records records

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "namespace": "$DOCKER_NAMESPACE",
+  "image": "$DOCKER_IMAGE",
+  "envFile": "examples/test-image/.env",
+  "context": "examples/test-image",
+  "buildArgs": {
+    "SHARED_MESSAGE": "$FIXTURE_MESSAGE"
+  },
+  "targets": [
+    {
+      "id": "linux-amd64",
+      "runner": "ubuntu-latest",
+      "dockerfile": "examples/test-image/linux/Dockerfile",
+      "buildArgs": { "TARGET_ID": "linux-amd64" },
+      "timeoutMinutes": 30
+    },
+    {
+      "id": "linux-arm64",
+      "runner": "ubuntu-24.04-arm",
+      "dockerfile": "examples/test-image/linux/Dockerfile",
+      "buildArgs": { "TARGET_ID": "linux-arm64" },
+      "timeoutMinutes": 30
+    },
+    {
+      "id": "windows-2019",
+      "runner": "windows-latest",
+      "dockerfile": "examples/test-image/windows/Dockerfile",
+      "buildArgs": {
+        "TARGET_ID": "windows-2019",
+        "BASE_IMAGE": "mcr.microsoft.com/windows/nanoserver:ltsc2019"
+      },
+      "timeoutMinutes": 30
+    },
+    {
+      "id": "windows-2022",
+      "runner": "windows-latest",
+      "dockerfile": "examples/test-image/windows/Dockerfile",
+      "buildArgs": {
+        "TARGET_ID": "windows-2022",
+        "BASE_IMAGE": "mcr.microsoft.com/windows/nanoserver:ltsc2022"
+      },
+      "timeoutMinutes": 30
+    }
+  ],
+  "variants": [
+    { "tag": "1.0", "buildArgs": { "VARIANT": "1.0" } },
+    { "tag": "2.0", "buildArgs": { "VARIANT": "2.0" } }
+  ]
+}

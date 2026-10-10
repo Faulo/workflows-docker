@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from build_group import bake_definition, classic, record_results
+from build_group import bake_definition, classic, local_result
 from build_windows import build_command
 from configure import make_plan
 
@@ -56,52 +56,25 @@ class GroupTests(unittest.TestCase):
             {target["args"]["PHP_VERSION"] for target in targets},
         )
 
-    def test_windows_variants_keep_their_own_base_images(self):
-        definition = bake_definition(plan("choco"), "g000", "windows/amd64")
-        self.assertEqual(["b000", "b002"], definition["group"]["default"]["targets"])
-        targets = definition["target"]
-        self.assertNotEqual(
-            targets["b000"]["args"]["BASE_IMAGE"], targets["b002"]["args"]["BASE_IMAGE"]
-        )
-        self.assertTrue(
-            all(
-                "type=provenance,disabled=true" in target["attest"]
-                for target in targets.values()
-            )
-        )
-
     def test_trial_builds_export_archives_without_pushing(self):
-        targets = bake_definition(
-            plan("choco"), "g000", "windows/amd64", publish=False
-        )["target"]
+        targets = bake_definition(plan("farah"), "g000", "linux/amd64", publish=False)[
+            "target"
+        ]
         self.assertEqual(["type=oci,dest=bake/b000.tar"], targets["b000"]["output"])
 
     def test_windows_records_require_actual_os_version(self):
-        candidate = plan("choco")
-        metadata = {
-            build_id: {"containerimage.digest": DIGEST}
-            for build_id in candidate["groups"][0]["builds"]
+        build = {"id": "b000"}
+        config = {
+            "os": "windows",
+            "architecture": "amd64",
+            "os.version": "10.0.17763.1",
         }
-        with tempfile.TemporaryDirectory() as directory:
-            inspect = lambda *_: {
-                "os": "windows",
-                "architecture": "amd64",
-                "os.version": "10.0.17763.1",
-            }
-            record_results(
-                candidate, "g000", "windows/amd64", metadata, directory, inspect=inspect
-            )
-            record = json.loads((Path(directory) / "b000.json").read_text())
-            self.assertEqual("10.0.17763.1", record["platform"]["os.version"])
-            with self.assertRaisesRegex(ValueError, "Missing Windows OS version"):
-                record_results(
-                    candidate,
-                    "g000",
-                    "windows/amd64",
-                    metadata,
-                    directory,
-                    inspect=lambda *_: {"os": "windows", "architecture": "amd64"},
-                )
+        record = local_result(build, DIGEST, "windows/amd64", config)
+        self.assertTrue(record["local"])
+        self.assertEqual("10.0.17763.1", record["platform"]["os.version"])
+        del config["os.version"]
+        with self.assertRaisesRegex(ValueError, "Missing Windows OS version"):
+            local_result(build, DIGEST, "windows/amd64", config)
 
 
 if __name__ == "__main__":

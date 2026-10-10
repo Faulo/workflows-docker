@@ -7,19 +7,15 @@ on:
         description: JSON configuration path relative to the caller repository root
         required: true
         type: string
-      windows-builder:
-        description: Windows builder (classic, or experimental buildkit)
-        default: classic
-        type: string
       publish:
         description: Publish images and public tags; false validates local trial builds
         default: true
         type: boolean
     secrets:
       DOCKERHUB_USERNAME:
-        required: true
+        required: false
       DOCKERHUB_TOKEN:
-        required: true
+        required: false
 
 permissions:
   contents: read
@@ -55,10 +51,12 @@ jobs:
         working-directory: source
         env:
           CONFIG_PATH: ${{ inputs.config }}
-          WINDOWS_BUILDER: ${{ inputs.windows-builder }}
+          PUBLISH: ${{ inputs.publish }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          if [[ "$WINDOWS_BUILDER" != classic && "$WINDOWS_BUILDER" != buildkit ]]; then
-            echo 'windows-builder must be classic or buildkit' >&2
+          if [[ "$PUBLISH" == true && ( -z "$DOCKERHUB_USERNAME" || -z "$DOCKERHUB_TOKEN" ) ]]; then
+            echo 'Publication requires DOCKERHUB_USERNAME and DOCKERHUB_TOKEN secrets.' >&2
             exit 1
           fi
           python ../workflow/scripts/configure.py --config "$CONFIG_PATH" --output ../plan/plan.json
@@ -123,9 +121,6 @@ jobs:
           import sys
           sys.path.insert(0, 'workflow/scripts')
           runpy.run_path('workflow/scripts/detect_platform.py', run_name='__main__')
-      - name: Set up Windows BuildKit
-        if: runner.os == 'Windows' && inputs.windows-builder == 'buildkit'
-        uses: ./workflow/.github/actions/windows-buildkit
       - name: Set up Buildx
         if: runner.os == 'Linux'
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
@@ -133,19 +128,14 @@ jobs:
           buildkitd-config-inline: |
             [worker.oci]
               max-parallelism = 2
-      - name: Connect Buildx to Windows BuildKit
-        if: runner.os == 'Windows' && inputs.windows-builder == 'buildkit'
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
-        with:
-          driver: remote
-          endpoint: npipe:////./pipe/docker-v2-buildkitd
       - name: Login to Docker Hub
+        if: inputs.publish
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Prepare shared variant builds
-        if: runner.os == 'Linux' || inputs.windows-builder == 'buildkit'
+        if: runner.os == 'Linux'
         shell: python
         env:
           GROUP_ID: ${{ matrix.id }}
@@ -173,16 +163,8 @@ jobs:
           import os, pathlib, subprocess
           pathlib.Path('bake/metadata.json').write_text(os.environ['BAKE_METADATA'], encoding='utf-8')
           subprocess.run(['python', 'workflow/scripts/build_group.py', 'record', '--plan', 'plan/plan.json', '--group', os.environ['GROUP_ID'], '--platform', os.environ['BUILD_PLATFORM'], '--publish', os.environ['PUBLISH'], '--directory', os.environ['RECORD_DIRECTORY']], check=True)
-      - name: Build Windows variants with shared BuildKit cache
-        if: runner.os == 'Windows' && inputs.windows-builder == 'buildkit'
-        uses: ./workflow/.github/actions/windows-bake
-        with:
-          group: ${{ matrix.id }}
-          platform: ${{ steps.platform.outputs.platform }}
-          publish: ${{ inputs.publish }}
-          directory: ${{ env.RECORD_DIRECTORY }}
       - name: Build Windows variants with shared local cache
-        if: runner.os == 'Windows' && inputs.windows-builder == 'classic'
+        if: runner.os == 'Windows'
         working-directory: source
         shell: pwsh
         env:
@@ -193,21 +175,12 @@ jobs:
           python ../workflow/scripts/build_group.py classic --plan ../plan/plan.json --group $env:GROUP_ID --platform $env:BUILD_PLATFORM --publish $env:PUBLISH --directory $env:RECORD_DIRECTORY
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Store build result
-        if: inputs.publish
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: docker-v2-record-${{ matrix.id }}
           path: ${{ env.RECORD_DIRECTORY }}/*.json
           if-no-files-found: error
           overwrite: true
-          retention-days: 7
-      - name: Store Windows BuildKit diagnostics
-        if: always() && runner.os == 'Windows' && inputs.windows-builder == 'buildkit'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: docker-v2-buildkit-logs-${{ matrix.id }}
-          path: ${{ runner.temp }}/docker-v2-buildkit/*.log
-          if-no-files-found: ignore
           retention-days: 7
 
   publication:
