@@ -221,15 +221,31 @@ def make_plan(config, root=None, environment=None):
             )
             ids.append(build_id)
         publications.append({"tags": [tag, *aliases], "builds": ids})
-    require(
-        len(builds) <= 256,
-        "Configuration is limited to 256 matrix jobs",
-    )
+    groups = {}
+    for build in builds:
+        target = build["target"]
+        if target not in groups:
+            groups[target] = {
+                "id": f"g{len(groups):03d}",
+                "target": target,
+                "runner": build["runner"],
+                "timeoutMinutes": build["timeoutMinutes"],
+                "builds": [],
+            }
+        group = groups[target]
+        require(
+            group["runner"] == build["runner"]
+            and group["timeoutMinutes"] == build["timeoutMinutes"],
+            f"Target {target} must use the same runner and timeout in every variant",
+        )
+        group["builds"].append(build["id"])
+    require(len(groups) <= 256, "Configuration is limited to 256 matrix jobs")
     plan = {
         "namespace": namespace,
         "image": image,
         "reference": f"{namespace}/{image}",
         "builds": builds,
+        "groups": list(groups.values()),
         "publications": publications,
     }
     require(
@@ -300,7 +316,15 @@ def main():
     write_json(args.output, plan)
     outputs = {
         "image": plan["reference"],
-        "matrix": json.dumps({"include": plan["builds"]}, separators=(",", ":")),
+        "matrix": json.dumps(
+            {
+                "include": [
+                    {k: v for k, v in group.items() if k != "builds"}
+                    for group in plan["groups"]
+                ]
+            },
+            separators=(",", ":"),
+        ),
     }
     if "GITHUB_OUTPUT" in os.environ:
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:

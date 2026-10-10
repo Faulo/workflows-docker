@@ -7,6 +7,14 @@ on:
         description: JSON configuration path relative to the caller repository root
         required: true
         type: string
+      windows-builder:
+        description: Windows builder (classic, or experimental buildkit)
+        default: classic
+        type: string
+      publish:
+        description: Publish images and public tags; false validates local trial builds
+        default: true
+        type: boolean
     secrets:
       DOCKERHUB_USERNAME:
         required: true
@@ -47,7 +55,13 @@ jobs:
         working-directory: source
         env:
           CONFIG_PATH: ${{ inputs.config }}
-        run: python ../workflow/scripts/configure.py --config "$CONFIG_PATH" --output ../plan/plan.json
+          WINDOWS_BUILDER: ${{ inputs.windows-builder }}
+        run: |
+          if [[ "$WINDOWS_BUILDER" != classic && "$WINDOWS_BUILDER" != buildkit ]]; then
+            echo 'windows-builder must be classic or buildkit' >&2
+            exit 1
+          fi
+          python ../workflow/scripts/configure.py --config "$CONFIG_PATH" --output ../plan/plan.json
       - name: Store publication plan
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -58,7 +72,7 @@ jobs:
           retention-days: 7
 
   build:
-    name: ${{ matrix.target }} × ${{ matrix.variant }}
+    name: ${{ matrix.target }}
     needs: configuration
     strategy:
       fail-fast: false
@@ -68,7 +82,6 @@ jobs:
     timeout-minutes: ${{ matrix.timeoutMinutes }}
     env:
       IMAGE: ${{ needs.configuration.outputs.image }}
-      BUILD_ENTRY: ${{ toJSON(matrix) }}
       RECORD_DIRECTORY: ${{ github.workspace }}/docker-v2-records/${{ github.run_id }}/${{ github.run_attempt }}/${{ matrix.id }}
     steps:
       - name: Checkout caller
@@ -96,6 +109,11 @@ jobs:
             if ($attempt -eq 24) { throw 'Windows Docker daemon not ready after 120 seconds' }
             Start-Sleep -Seconds 5
           }
+      - name: Download publication plan
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: docker-v2-plan
+          path: plan
       - name: Detect native platform
         id: platform
         shell: python
@@ -104,46 +122,63 @@ jobs:
           import sys
           sys.path.insert(0, 'workflow/scripts')
           runpy.run_path('workflow/scripts/detect_platform.py', run_name='__main__')
+      - name: Set up Windows BuildKit
+        if: runner.os == 'Windows' && inputs.windows-builder == 'buildkit'
+        shell: pwsh
+        run: ./workflow/scripts/setup_windows_buildkit.ps1
       - name: Set up Buildx
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' || inputs.windows-builder == 'buildkit'
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        with:
+          driver: ${{ runner.os == 'Windows' && 'remote' || 'docker-container' }}
+          endpoint: ${{ runner.os == 'Windows' && 'npipe:////./pipe/docker-v2-buildkitd' || '' }}
       - name: Login to Docker Hub
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Build and push Linux image by digest
-        if: runner.os == 'Linux'
-        id: linux
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
-        with:
-          context: source/${{ matrix.context }}
-          file: source/${{ matrix.dockerfile }}
-          platforms: ${{ steps.platform.outputs.platform }}
-          build-args: ${{ matrix.buildArgsText }}
-          tags: ${{ env.IMAGE }}
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          pull: true
-          cache-from: type=gha,scope=v2-${{ matrix.variant }}-${{ matrix.target }}
-          cache-to: type=gha,mode=max,scope=v2-${{ matrix.variant }}-${{ matrix.target }}
-          provenance: mode=max
-          sbom: true
-      - name: Record Linux image digest
-        if: runner.os == 'Linux'
+      - name: Prepare shared variant builds
+        if: runner.os == 'Linux' || inputs.windows-builder == 'buildkit'
+        shell: python
         env:
-          IMAGE_DIGEST: ${{ steps.linux.outputs.digest }}
+          GROUP_ID: ${{ matrix.id }}
           BUILD_PLATFORM: ${{ steps.platform.outputs.platform }}
-        run: python workflow/scripts/record_linux.py
-      - name: Build and push Windows image
-        if: runner.os == 'Windows'
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          import os, subprocess
+          subprocess.run(['python', 'workflow/scripts/build_group.py', 'prepare', '--plan', 'plan/plan.json', '--group', os.environ['GROUP_ID'], '--platform', os.environ['BUILD_PLATFORM'], '--publish', os.environ['PUBLISH']], check=True)
+      - name: Build variants with shared BuildKit cache
+        if: runner.os == 'Linux' || inputs.windows-builder == 'buildkit'
+        id: bake
+        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7
+        with:
+          files: bake/docker-bake.json
+          source: .
+      - name: Record variant results
+        if: runner.os == 'Linux' || inputs.windows-builder == 'buildkit'
+        shell: python
+        env:
+          BAKE_METADATA: ${{ steps.bake.outputs.metadata }}
+          GROUP_ID: ${{ matrix.id }}
+          BUILD_PLATFORM: ${{ steps.platform.outputs.platform }}
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          import os, pathlib, subprocess
+          pathlib.Path('bake/metadata.json').write_text(os.environ['BAKE_METADATA'], encoding='utf-8')
+          subprocess.run(['python', 'workflow/scripts/build_group.py', 'record', '--plan', 'plan/plan.json', '--group', os.environ['GROUP_ID'], '--platform', os.environ['BUILD_PLATFORM'], '--publish', os.environ['PUBLISH'], '--directory', os.environ['RECORD_DIRECTORY']], check=True)
+      - name: Build Windows variants with shared local cache
+        if: runner.os == 'Windows' && inputs.windows-builder == 'classic'
         working-directory: source
         shell: pwsh
         env:
           BUILD_PLATFORM: ${{ steps.platform.outputs.platform }}
+          GROUP_ID: ${{ matrix.id }}
+          PUBLISH: ${{ inputs.publish }}
         run: |
-          python ../workflow/scripts/build_windows.py
+          python ../workflow/scripts/build_group.py classic --plan ../plan/plan.json --group $env:GROUP_ID --platform $env:BUILD_PLATFORM --publish $env:PUBLISH --directory $env:RECORD_DIRECTORY
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Store build result
+        if: inputs.publish
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: docker-v2-record-${{ matrix.id }}
@@ -151,10 +186,18 @@ jobs:
           if-no-files-found: error
           overwrite: true
           retention-days: 7
+      - name: Store Windows BuildKit diagnostics
+        if: always() && runner.os == 'Windows' && inputs.windows-builder == 'buildkit'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: docker-v2-buildkit-logs-${{ matrix.id }}
+          path: ${{ runner.temp }}/docker-v2-buildkit/*.log
+          if-no-files-found: ignore
+          retention-days: 7
 
   publication:
     needs: [configuration, build]
-    if: always() && needs.configuration.result == 'success'
+    if: always() && inputs.publish && needs.configuration.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:

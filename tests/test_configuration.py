@@ -158,10 +158,35 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_matrix_limit(self):
         config = example()
-        config["targets"] = config["targets"][:1]
-        config["variants"] = [{"tag": f"release-{number}"} for number in range(257)]
+        config["targets"] = [
+            {**config["targets"][0], "id": f"target-{number}"} for number in range(257)
+        ]
+        config["variants"] = [{"tag": "latest"}]
         with self.assertRaisesRegex(ValueError, "256 matrix"):
             make_plan(config)
+
+    def test_variants_share_target_jobs_without_losing_arguments(self):
+        plan = make_plan(example())
+        self.assertEqual(3, len(plan["groups"]))
+        self.assertTrue(all(len(group["builds"]) == 7 for group in plan["groups"]))
+        self.assertEqual(21, sum(len(group["builds"]) for group in plan["groups"]))
+        choco = make_plan(example("docker-choco"))
+        self.assertEqual(2, len(choco["groups"]))
+        self.assertEqual(["b000", "b002"], choco["groups"][0]["builds"])
+        self.assertNotEqual(
+            choco["builds"][0]["buildArgs"]["BASE_IMAGE"],
+            choco["builds"][2]["buildArgs"]["BASE_IMAGE"],
+        )
+
+    def test_same_target_rejects_inconsistent_runner_or_timeout(self):
+        for override in ({"runner": "windows-2022"}, {"timeoutMinutes": 60}):
+            config = example("docker-choco")
+            config["variants"][1]["targets"][0].update(override)
+            with (
+                self.subTest(override=override),
+                self.assertRaisesRegex(ValueError, "same runner and timeout"),
+            ):
+                make_plan(config)
 
     def test_substitution_is_single_pass_and_preserves_json_values(self):
         source = {"image": "$IMAGE", "args": ["${VALUE}", "$$literal", 42, True]}
