@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -22,7 +23,7 @@ def staging_tag(build_id, run_id, attempt):
         str(run_id).isdigit() and str(attempt).isdigit(),
         "Invalid workflow run identity",
     )
-    return f"wf-v2-{run_id}-{attempt}-{build_id}"
+    return f"wf-v3-{run_id}-{attempt}-{build_id}"
 
 
 def build_command(entry, target_image, cache_image=None):
@@ -54,7 +55,7 @@ def main(use_local_cache=False):
         entry["id"], os.environ["GITHUB_RUN_ID"], os.environ["GITHUB_RUN_ATTEMPT"]
     )
     target_image = f"{image}:{tag}"
-    cache_image = f"{image}:{entry['variant']}"
+    cache_image = f"{image}:{entry['tag']}"
     # A cold cache or an incompatible previous manifest must not prevent a build.
     pulled = docker("image", "pull", cache_image, check=False)
     # Legacy --cache-from restricts eligible local layers to that image's
@@ -76,24 +77,20 @@ def main(use_local_cache=False):
         isinstance(version, str) and bool(version),
         f"Unexpected Windows image OS version: {version}",
     )
-    docker("image", "push", target_image)
-    inspection = json.loads(
-        docker("image", "inspect", target_image, capture=True).stdout
-    )[0]
-    digests = {
-        item.split("@", 1)[1]
-        for item in inspection.get("RepoDigests", [])
-        if item.split("@", 1)[0].removeprefix("docker.io/") == image
-    }
+    # A cached image can retain an index digest as well as its image digest.
+    digest = docker(
+        "image", "push", "--quiet", target_image, capture=True
+    ).stdout.strip()
     require(
-        len(digests) == 1,
-        "Pushed Windows image must have exactly one repository digest",
+        re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is not None,
+        "Windows push must return an immutable image digest",
     )
+    print(f"Pushed {target_image}@{digest}")
     write_json(
         Path(os.environ["RECORD_DIRECTORY"]) / f"{entry['id']}.json",
         {
             "id": entry["id"],
-            "digest": digests.pop(),
+            "digest": digest,
             "stagingTag": tag,
             "platform": {
                 "os": "windows",

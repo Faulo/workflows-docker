@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Docker publishing configuration v2",
+  "title": "Docker publishing configuration v3",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -11,7 +11,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": 1
+      "const": 2
     },
     "image": {
       "type": "string",
@@ -96,7 +96,7 @@
       "minLength": 1,
       "pattern": "^[^\\r\\n\\u0000]+$",
       "maxLength": 128,
-      "description": "Public Docker tag after environment substitution; wf-v2- prefix is reserved"
+      "description": "Public Docker tag after environment substitution; wf-v3- prefix is reserved"
     },
     "path": {
       "type": "string",
@@ -148,16 +148,14 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "id",
+          "tag",
           "runner",
           "dockerfile"
         ],
         "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "^[^\\r\\n\\u0000]+$",
-            "description": "Unique lowercase target id after environment substitution"
+          "tag": {
+            "$ref": "#/$defs/tag",
+            "description": "Unique target tag suffix within a variant, after environment substitution"
           },
           "runner": {
             "$ref": "#/$defs/runner"

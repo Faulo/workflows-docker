@@ -46,6 +46,12 @@ class FixtureTests(unittest.TestCase):
         self.assertTrue(all(len(group["builds"]) == 2 for group in self.plan["groups"]))
         verify(self.plan, self.records)
 
+    def test_target_publication_cannot_include_another_os(self):
+        plan = copy.deepcopy(self.plan)
+        plan["publications"][2]["builds"].append("b002")
+        with self.assertRaisesRegex(ValueError, "eight target-specific tags"):
+            verify(plan, self.records)
+
     def test_fixture_verification_rejects_wrong_platform_arguments_or_publication(self):
         mutations = [
             lambda r: r["b000"].update(local=False),

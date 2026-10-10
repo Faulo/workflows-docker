@@ -11,7 +11,7 @@ multiple Windows LTSC releases. Builds can also run without publication or
 registry credentials. Image preparation and compilation belong in Dockerfile
 stages; application tests run separately from this workflow.
 
-Use `v2` for compatible updates, or a version tag / full commit SHA for an immutable
+Use `v3` for compatible updates, or a version tag / full commit SHA for an immutable
 reference. The existing `publish.yml` interface remains available for v1 consumers;
 its documentation is in [docs/v1.md](docs/v1.md).
 
@@ -40,7 +40,7 @@ concurrency:
 
 jobs:
   docker:
-    uses: Faulo/workflows-docker/.github/workflows/docker.yml@v2
+    uses: Faulo/workflows-docker/.github/workflows/docker.yml@v3
     with:
       config: docker.json
     secrets:
@@ -66,22 +66,22 @@ the login username, including organization namespaces.
 ## Configuration
 
 The [JSON Schema](docker.schema.json) describes the configuration. Configuration
-schema version `1` is the first schema for workflow major version `2`.
+schema version `2` is required by workflow major version `3`.
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "namespace": "$DOCKER_NAMESPACE",
   "image": "$DOCKER_IMAGE",
   "context": ".",
   "targets": [
     {
-      "id": "linux-amd64",
+      "tag": "linux-amd64",
       "dockerfile": "linux/Dockerfile",
       "runner": "ubuntu-latest"
     },
     {
-      "id": "windows-2019",
+      "tag": "windows-2019",
       "dockerfile": "windows/Dockerfile",
       "runner": "windows-latest",
       "buildArgs": {"OS_BASE": "ltsc2019"}
@@ -115,7 +115,7 @@ Alternatively, use literal namespace and image names in the JSON configuration.
 
 | Target field | Meaning |
 | --- | --- |
-| `id` | Unique lowercase identifier within the product variant |
+| `tag` | Unique Docker tag suffix within the variant; publishes `<variant>-<target>` |
 | `dockerfile` | Required Dockerfile path relative to the consumer root |
 | `context` | Optional override of the default build context |
 | `buildArgs` | Final overrides of global and product build arguments |
@@ -149,7 +149,7 @@ host; the workflow does not choose a host based on the container release.
 
 One matrix covers all targets, including Windows-only and Linux-only projects.
 Each target gets one job containing all its product variants, with at most 256
-target jobs and four concurrent jobs. Repeated target IDs across variants must
+target jobs and four concurrent jobs. Repeated target tags across variants must
 use the same runner and timeout; their Dockerfiles, contexts, and build arguments
 can differ. Linux Dockerfiles must support the runner's native architecture;
 choosing an arm64 runner does not make an x64 application portable.
@@ -157,7 +157,7 @@ choosing an arm64 runner does not make an x64 application portable.
 Build argument precedence is global, then variant, then target. Values are
 single-line strings, numbers, or booleans. Credentials belong in secrets, not
 build arguments. Unknown properties, invalid tags, duplicate public tags,
-duplicate target ids, and missing contexts/Dockerfiles fail before builds start.
+duplicate target tags, and missing contexts/Dockerfiles fail before builds start.
 The schema handles structural validation; the planner also checks semantic
 constraints and the filesystem.
 
@@ -177,10 +177,26 @@ reliably choose full Windows versus Server Core when both match the same platfor
 and OS release. After builds complete, targets with the same platform and Windows
 OS build prefix within one product variant are rejected before any public tag moves.
 
-Every product variant publishes only its declared tag and aliases. Platform or
-LTSC suffix tags are created only when explicitly configured as variant tags or
-aliases. A Windows release is selected from the manifest by the runtime's
-platform matching; applications that need an exact base can pin an image digest.
+Each variant publishes a combined image index under its declared tag and aliases.
+Every target also publishes an index containing only that target's image and
+attestations, tagged `<variant.tag>-<target.tag>`. Aliases receive the same suffix:
+with variant `2.0`, alias `latest`, and target `ltsc2019`, publication creates
+`2.0`, `latest`, `2.0-ltsc2019`, and `latest-ltsc2019`.
+
+Use a target-specific tag to select a particular OS release or architecture even
+when the host can run several targets. Combined tags use the runtime's platform
+matching. Generated tags must be valid Docker tags of at most 128 characters,
+and must not collide with any declared tag, alias, or other generated tag.
+
+### Migration from v2
+
+Change the caller's workflow reference to `@v3`, set `schemaVersion` to `2`, and
+rename every target's `id` property to `tag`. The `id` configuration property is
+rejected, including when `tag` is also present. Choose suffixes suitable for your
+public image tags: for example, `ltsc2019` produces `2.0-ltsc2019`.
+
+Published v2 tags retain their previous interface. The current implementation
+accepts only the v3 configuration contract.
 
 ## Publication behavior
 
@@ -192,7 +208,7 @@ at most two build operations concurrently per runner. Identical compiler stages
 and common layers can be reused within a target when their inputs match.
 
 Windows target jobs build variants sequentially on one Docker daemon,
-retaining intermediate compiler stages locally. They use the previous product
+retaining intermediate compiler stages locally. They use the previous target-specific
 tag as a best-effort cache across runs and push to run-specific staging tags.
 Final-image caching does not retain separate compiler stages across fresh runners.
 Windows platform metadata and a nonempty OS version are checked before pushing.
@@ -217,7 +233,7 @@ then verifies each public tag against the expected image digests and platforms.
 Aliases must reference the same final index digest as their product tag. A
 publication summary lists the resulting tags, index digests, and image platforms.
 
-Windows staging tags begin with reserved `wf-v2-` names and are deleted after
+Windows staging tags begin with reserved `wf-v3-` names and are deleted after
 publication or a build failure, including earlier attempts of the same run. Because
 runner labels are opaque, cleanup checks reserved staging names for all targets;
 Linux names return 404. A cleanup failure is reported as a workflow failure.
@@ -262,7 +278,7 @@ publisher tests.
 
 Dependabot checks GitHub Actions dependencies weekly and groups available updates
 into one pull request. Action references remain pinned to commit SHAs. Updates to
-the v2 workflow and its validation workflow are checked by the unpublished
+the v3 workflow and its validation workflow are checked by the unpublished
 example builds.
 
 The implementation uses Python's standard library on runners. Run its focused

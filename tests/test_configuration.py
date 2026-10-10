@@ -33,7 +33,7 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_multi_platform_variants_and_latest(self):
         plan = make_plan(example())
-        self.assertEqual(["1.6", "latest"], plan["publications"][-1]["tags"])
+        self.assertEqual(["1.6", "latest"], plan["publications"][6]["tags"])
         self.assertEqual(
             {"ubuntu-latest", "ubuntu-24.04-arm", "windows-latest"},
             {build["runner"] for build in plan["builds"]},
@@ -45,7 +45,7 @@ class ConfigurationTests(unittest.TestCase):
         plan = make_plan(example("windows-families"))
         self.assertEqual(
             [["windows", "latest"], ["windowsservercore"]],
-            [publication["tags"] for publication in plan["publications"]],
+            [publication["tags"] for publication in plan["publications"][:2]],
         )
         self.assertTrue(
             all(build["runner"] == "windows-latest" for build in plan["builds"])
@@ -65,6 +65,82 @@ class ConfigurationTests(unittest.TestCase):
         self.assertTrue(
             all(build["runner"] == "windows-latest" for build in plan["builds"])
         )
+
+    def test_target_specific_tags_and_aliases_select_one_build(self):
+        config = example("windows-families")
+        for variant in config["variants"]:
+            for target in variant["targets"]:
+                target["tag"] = target["tag"].replace("windows-", "ltsc")
+        plan = make_plan(config)
+        self.assertEqual(
+            [
+                {"tags": ["windows-ltsc2019", "latest-ltsc2019"], "builds": ["b000"]},
+                {"tags": ["windows-ltsc2022", "latest-ltsc2022"], "builds": ["b001"]},
+                {"tags": ["windowsservercore-ltsc2019"], "builds": ["b002"]},
+                {"tags": ["windowsservercore-ltsc2022"], "builds": ["b003"]},
+            ],
+            plan["publications"][2:],
+        )
+        self.assertEqual("windows-ltsc2019", plan["builds"][0]["tag"])
+
+    def test_legacy_target_id_rejected(self):
+        for retain_tag in (True, False):
+            config = example()
+            target = config["targets"][0]
+            target["id"] = target["tag"]
+            if not retain_tag:
+                del target["tag"]
+            with (
+                self.subTest(retain_tag=retain_tag),
+                self.assertRaisesRegex(ValueError, "Unknown properties in target"),
+            ):
+                make_plan(config)
+
+    def test_generated_tag_collisions_rejected(self):
+        for variants in (
+            [{"tag": "app"}, {"tag": "app-linux-amd64"}],
+            [{"tag": "app", "aliases": ["app-linux-amd64"]}],
+            [
+                {
+                    "tag": "app",
+                    "targets": [
+                        {
+                            "tag": "a-b",
+                            "dockerfile": "Dockerfile",
+                            "runner": "ubuntu-latest",
+                        }
+                    ],
+                },
+                {
+                    "tag": "app-a",
+                    "targets": [
+                        {
+                            "tag": "b",
+                            "dockerfile": "Dockerfile",
+                            "runner": "ubuntu-latest",
+                        }
+                    ],
+                },
+            ],
+        ):
+            config = example()
+            config["variants"] = variants
+            with (
+                self.subTest(variants=variants),
+                self.assertRaisesRegex(ValueError, "Duplicate public tag"),
+            ):
+                make_plan(config)
+
+    def test_generated_tag_length_and_substitution(self):
+        config = example()
+        config["targets"] = [config["targets"][0]]
+        config["targets"][0]["tag"] = "$TARGET_TAG"
+        config["variants"] = [{"tag": "v" * 63}]
+        plan = make_plan(config, environment={"TARGET_TAG": "t" * 64})
+        self.assertEqual(128, len(plan["builds"][0]["tag"]))
+        config["variants"][0]["tag"] += "v"
+        with self.assertRaisesRegex(ValueError, "Invalid or reserved public tag"):
+            make_plan(config, environment={"TARGET_TAG": "t" * 64})
 
     def test_linux_only_and_overrides(self):
         config = example()
@@ -91,23 +167,23 @@ class ConfigurationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Duplicate public tag"):
             make_plan(config)
 
-    def test_duplicate_target_ids_rejected(self):
+    def test_duplicate_target_tags_rejected(self):
         config = example("windows-families")
         config["variants"][0]["targets"].append(
             copy.deepcopy(config["variants"][0]["targets"][0])
         )
-        with self.assertRaisesRegex(ValueError, "Duplicate target id"):
+        with self.assertRaisesRegex(ValueError, "Duplicate target tag"):
             make_plan(config)
 
     def test_invalid_configuration_rejected(self):
         mutations = [
-            lambda c: c.update(schemaVersion=2),
+            lambda c: c.update(schemaVersion=1),
             lambda c: c.update(schemaVersion=True),
             lambda c: c.update(image="namespace/image"),
             lambda c: c.update(namespace="invalid/namespace"),
             lambda c: c.update(tests={}),
             lambda c: c.update(targets=[]),
-            lambda c: c["variants"][0].update(tag="wf-v2-private"),
+            lambda c: c["variants"][0].update(tag="wf-v3-private"),
             lambda c: c["variants"][0].update(tag="invalid tag"),
             lambda c: c["targets"][0].update(platform="windows/arm64"),
             lambda c: c["targets"][0].update(timeoutMinutes=0),
@@ -146,7 +222,7 @@ class ConfigurationTests(unittest.TestCase):
     def test_matrix_limit(self):
         config = example()
         config["targets"] = [
-            {**config["targets"][0], "id": f"target-{number}"} for number in range(257)
+            {**config["targets"][0], "tag": f"target-{number}"} for number in range(257)
         ]
         config["variants"] = [{"tag": "latest"}]
         with self.assertRaisesRegex(ValueError, "256 matrix"):

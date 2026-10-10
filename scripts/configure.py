@@ -8,7 +8,6 @@ import re
 from pathlib import Path
 
 TAG = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}\Z")
-ID = re.compile(r"[a-z0-9][a-z0-9-]{0,63}\Z")
 IMAGE = re.compile(r"[a-z0-9]+(?:[._-][a-z0-9]+)*\Z")
 VARIABLE = re.compile(r"\$(\$|\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)")
 
@@ -161,8 +160,8 @@ def make_plan(config, root=None, environment=None):
         "configuration",
     )
     require(
-        type(config.get("schemaVersion")) is int and config["schemaVersion"] == 1,
-        "schemaVersion must be 1",
+        type(config.get("schemaVersion")) is int and config["schemaVersion"] == 2,
+        "schemaVersion must be 2",
     )
     image = config.get("image")
     namespace = config.get("namespace")
@@ -182,33 +181,42 @@ def make_plan(config, root=None, environment=None):
     )
     if "targets" in config:
         validate_targets(config["targets"], root)
-    builds, publications, tags = [], [], set()
+    builds, publications, target_publications, tags = [], [], [], set()
+
+    def register_tag(name):
+        require(
+            isinstance(name, str)
+            and TAG.fullmatch(name)
+            and not name.startswith("wf-v3-"),
+            f"Invalid or reserved public tag: {name}",
+        )
+        require(name not in tags, f"Duplicate public tag: {name}")
+        tags.add(name)
+
     for variant in variants:
         object_keys(variant, {"tag", "aliases", "buildArgs", "targets"}, "variant")
         tag = variant.get("tag")
         aliases = variant.get("aliases", [])
         require(isinstance(aliases, list), "aliases must be an array")
         for name in [tag, *aliases]:
-            require(
-                isinstance(name, str)
-                and TAG.fullmatch(name)
-                and not name.startswith("wf-v2-"),
-                f"Invalid or reserved public tag: {name}",
-            )
-            require(name not in tags, f"Duplicate public tag: {name}")
-            tags.add(name)
+            register_tag(name)
         merged_args = base_args | arguments(variant.get("buildArgs", {}))
         targets = variant.get("targets", config.get("targets"))
         validate_targets(targets, root)
         ids = []
         for target in targets:
             build_id = f"b{len(builds):03d}"
+            target_tags = [f"{name}-{target['tag']}" for name in [tag, *aliases]]
+            for name in target_tags:
+                register_tag(name)
+            target_publications.append({"tags": target_tags, "builds": [build_id]})
             build_args = merged_args | arguments(target.get("buildArgs", {}))
             builds.append(
                 {
                     "id": build_id,
                     "variant": tag,
-                    "target": target["id"],
+                    "target": target["tag"],
+                    "tag": target_tags[0],
                     "runner": target["runner"],
                     "context": target.get("context", context),
                     "dockerfile": target["dockerfile"],
@@ -221,6 +229,7 @@ def make_plan(config, root=None, environment=None):
             )
             ids.append(build_id)
         publications.append({"tags": [tag, *aliases], "builds": ids})
+    publications.extend(target_publications)
     groups = {}
     for build in builds:
         target = build["target"]
@@ -260,12 +269,12 @@ def validate_targets(targets, root):
         isinstance(targets, list) and targets,
         "Each variant must have a nonempty targets array",
     )
-    ids = set()
+    tags = set()
     for target in targets:
         object_keys(
             target,
             {
-                "id",
+                "tag",
                 "runner",
                 "context",
                 "dockerfile",
@@ -274,13 +283,13 @@ def validate_targets(targets, root):
             },
             "target",
         )
-        target_id = target.get("id")
+        target_tag = target.get("tag")
         require(
-            isinstance(target_id, str) and ID.fullmatch(target_id),
-            f"Invalid target id: {target_id}",
+            isinstance(target_tag, str) and TAG.fullmatch(target_tag),
+            f"Invalid target tag: {target_tag}",
         )
-        require(target_id not in ids, f"Duplicate target id: {target_id}")
-        ids.add(target_id)
+        require(target_tag not in tags, f"Duplicate target tag: {target_tag}")
+        tags.add(target_tag)
         runner = target.get("runner")
         if isinstance(runner, list):
             require(bool(runner), "runner label array must not be empty")

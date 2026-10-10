@@ -11,6 +11,8 @@ from urllib.error import HTTPError
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from build_windows import build_command, staging_tag
 from cleanup import cleanup, staging_tags
+from configuration_fixtures import example
+from configure import make_plan
 from publish import load_records, publish, source_descriptors, verify_manifest
 
 DIGEST = "sha256:" + "1" * 64
@@ -27,6 +29,56 @@ def descriptor(digest=DIGEST, os_name="linux", architecture="amd64", version=Non
 
 
 class PublicationTests(unittest.TestCase):
+    def test_target_tags_preserve_only_their_image_and_attestations(self):
+        config = example()
+        config["targets"] = [config["targets"][0], config["targets"][2]]
+        config["variants"] = [{"tag": "1.0", "aliases": ["latest"]}]
+        plan = make_plan(config)
+        linux = [descriptor(), descriptor(OTHER, "unknown", "unknown")]
+        windows = [descriptor(INDEX, "windows", version="10.0.17763.1000")]
+        sources = {"b000": linux, "b001": windows}
+        published = {}
+        preflight_count = 0
+
+        def read_files(args):
+            return [
+                json.loads(Path(args[index + 1]).read_text())
+                for index, arg in enumerate(args)
+                if arg == "--file"
+            ]
+
+        def inspect(*args):
+            nonlocal preflight_count
+            if args[0] == "create":
+                preflight_count += 1
+                return {"manifests": read_files(args)}
+            return {"digest": INDEX, "manifests": published[args[1]]}
+
+        def run(command, **kwargs):
+            self.assertEqual(3, preflight_count)
+            for index, arg in enumerate(command):
+                if arg == "--tag":
+                    published[command[index + 1]] = read_files(command)
+            Path(command[-1]).write_text(
+                json.dumps({"containerimage.descriptor": {"digest": INDEX}})
+            )
+
+        with (
+            patch(
+                "publish.source_descriptors",
+                side_effect=lambda image, build, record, inspect: sources[build["id"]],
+            ),
+            patch("publish.subprocess.run", side_effect=run),
+            patch.dict(os.environ, {}, clear=True),
+        ):
+            publish(plan, {"b000": {}, "b001": {}}, "example/app", inspect)
+        self.assertEqual(linux + windows, published["example/app:1.0"])
+        self.assertEqual(linux + windows, published["example/app:latest"])
+        self.assertEqual(linux, published["example/app:1.0-linux-amd64"])
+        self.assertEqual(linux, published["example/app:latest-linux-amd64"])
+        self.assertEqual(windows, published["example/app:1.0-windows-2019"])
+        self.assertEqual(windows, published["example/app:latest-windows-2019"])
+
     def test_exact_manifest_including_attestations(self):
         image = descriptor()
         attestation = descriptor(OTHER, "unknown", "unknown")
@@ -284,10 +336,10 @@ class PublicationTests(unittest.TestCase):
         }
         self.assertEqual(
             [
-                "wf-v2-123-1-b000",
-                "wf-v2-123-2-b000",
-                "wf-v2-123-1-b001",
-                "wf-v2-123-2-b001",
+                "wf-v3-123-1-b000",
+                "wf-v3-123-2-b000",
+                "wf-v3-123-1-b001",
+                "wf-v3-123-2-b001",
             ],
             staging_tags(plan, "123", "2"),
         )

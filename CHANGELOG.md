@@ -7,13 +7,22 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-10
+
 ### Fixed
 
+- Record the immutable digest returned by a Windows image push when cached images
+  retain both image and index repository digests.
+- Record the Windows staging digest returned by the push rather than rejecting
+  cached images that retain both an image digest and a product-index digest.
 - Record large Linux Bake metadata without exceeding the operating system's
   environment-variable size limit.
 
 ### Added
 
+- Target-specific image tags in the form `<variant.tag>-<target.tag>`, including
+  suffixed aliases, alongside the existing combined variant tags.
+- Validation of generated tag collisions and Docker's 128-character tag limit.
 - Monthly Dependabot updates for SHA-pinned GitHub Actions, grouped into one pull
   request.
 - Pull request validation using the eight unpublished example images.
@@ -21,9 +30,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Require configuration schema version `2` and rename target `id` to `tag`.
+- Pull Windows build caches from the target-specific tag to select the intended
+  Windows release on hosts compatible with multiple releases.
 - Document the public workflow interface with generic examples and an explicit
   workflow input reference.
 - Use generic configurations in planner and builder tests.
+
+### Removed
+
+- Support for the target `id` configuration property. Migrate callers to `@v3`,
+  set `schemaVersion` to `2`, and replace each target's `id` with `tag`.
 
 ## [2.1.0] - 2026-10-10
 
@@ -177,7 +194,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   verification after both builds succeed.
 - Serialized publication and usage documentation.
 
-[Unreleased]: https://github.com/Faulo/workflows-docker/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/Faulo/workflows-docker/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/Faulo/workflows-docker/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/Faulo/workflows-docker/compare/v2.0.1...v2.1.0
 [2.0.1]: https://github.com/Faulo/workflows-docker/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/Faulo/workflows-docker/compare/v1.2.0...v2.0.0

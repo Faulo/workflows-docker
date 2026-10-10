@@ -25,6 +25,28 @@ def verify(plan, records):
         == combinations,
         "Fixture must build exactly two variants on all four targets",
     )
+    expected_publications = {
+        variant: {
+            build["id"] for build in plan["builds"] if build["variant"] == variant
+        }
+        for variant in ("1.0", "2.0")
+    }
+    expected_publications.update(
+        {
+            f"{build['variant']}-{build['target']}": {build["id"]}
+            for build in plan["builds"]
+        }
+    )
+    actual_publications = {
+        tag: set(publication["builds"])
+        for publication in plan["publications"]
+        for tag in publication["tags"]
+    }
+    require(
+        len(plan["publications"]) == 10
+        and actual_publications == expected_publications,
+        "Fixture must plan two combined tags and eight target-specific tags",
+    )
     for build in plan["builds"]:
         record = records[build["id"]]
         require(record.get("local") is True, "Fixture image must remain unpublished")

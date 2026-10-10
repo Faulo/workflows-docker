@@ -3,25 +3,25 @@
 
 def example(kind="multi-platform"):
     config = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "namespace": "example",
         "image": "app",
         "context": ".",
     }
     windows_target = {
-        "id": "windows-2019",
+        "tag": "windows-2019",
         "dockerfile": "windows/Dockerfile",
         "runner": "windows-latest",
     }
     if kind == "multi-platform":
         config["targets"] = [
             {
-                "id": "linux-amd64",
+                "tag": "linux-amd64",
                 "dockerfile": "linux/Dockerfile",
                 "runner": "ubuntu-latest",
             },
             {
-                "id": "linux-arm64",
+                "tag": "linux-arm64",
                 "dockerfile": "linux/Dockerfile",
                 "runner": "ubuntu-24.04-arm",
             },
@@ -45,7 +45,7 @@ def example(kind="multi-platform"):
                 "targets": [
                     {
                         **windows_target,
-                        "id": f"windows-{release}",
+                        "tag": f"windows-{release}",
                         "buildArgs": {
                             "OS_BASE": f"ltsc{release}",
                             "BASE_IMAGE": (

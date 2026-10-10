@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   docker:
-    uses: Faulo/workflows-docker/.github/workflows/docker.yml@v2
+    uses: Faulo/workflows-docker/.github/workflows/docker.yml@v3
     with:
       config: docker.json
     secrets:
