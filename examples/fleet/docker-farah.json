@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "namespace": "$DOCKER_NAMESPACE",
+  "image": "$DOCKER_IMAGE",
+  "context": ".",
+  "targets": [
+    {
+      "id": "linux-amd64",
+      "dockerfile": "linux/Dockerfile",
+      "runner": "ubuntu-latest"
+    },
+    {
+      "id": "linux-arm64",
+      "dockerfile": "linux/Dockerfile",
+      "runner": "ubuntu-24.04-arm"
+    },
+    {
+      "id": "windows-2019",
+      "dockerfile": "windows/Dockerfile",
+      "runner": "windows-latest"
+    }
+  ],
+  "variants": [
+    {
+      "tag": "7.4",
+      "buildArgs": {
+        "PHP_VERSION": "7.4"
+      }
+    },
+    {
+      "tag": "8.0",
+      "buildArgs": {
+        "PHP_VERSION": "8.0"
+      }
+    },
+    {
+      "tag": "8.1",
+      "buildArgs": {
+        "PHP_VERSION": "8.1"
+      }
+    },
+    {
+      "tag": "8.2",
+      "buildArgs": {
+        "PHP_VERSION": "8.2"
+      }
+    },
+    {
+      "tag": "8.3",
+      "buildArgs": {
+        "PHP_VERSION": "8.3"
+      }
+    },
+    {
+      "tag": "8.4",
+      "buildArgs": {
+        "PHP_VERSION": "8.4"
+      }
+    },
+    {
+      "tag": "8.5",
+      "buildArgs": {
+        "PHP_VERSION": "8.5"
+      },
+      "aliases": [
+        "latest"
+      ]
+    }
+  ]
+}

@@ -1,246 +1,224 @@
-# Docker Publishing Workflow
+# Docker building and publishing workflow
 
-Reusable GitHub Actions workflow for building matching Linux and Windows Docker
-images, publishing their platform tags to Docker Hub, and merging them into one
-multi-platform tag.
+Version 2 keeps each consumer's `.github/workflows/docker.yml` identical and puts
+project configuration in JSON. This repository owns configuration validation,
+native builds, caching, registry login, publication, manifest verification, and
+temporary tag cleanup. Project tests run in Jenkins. Image preparation belongs in
+the project's Dockerfile, including compilation in intermediate stages.
 
-## Usage
+Use `v2` for compatible updates, or `v2.0.0` / a full commit SHA for an immutable
+reference. The existing `publish.yml` interface remains available for v1 consumers;
+its documentation is in [docs/v1.md](docs/v1.md).
 
-Create `.github/workflows/docker.yml` in the calling repository:
+## Identical consumer workflow
+
+Copy [examples/docker.yml](examples/docker.yml) to `.github/workflows/docker.yml`:
 
 ```yaml
 name: Docker
 
 on:
-    push:
-        branches:
-            - main
-        paths:
-            - "linux/**"
-            - "windows/**"
-            - ".github/workflows/docker.yml"
-    workflow_dispatch:
-    schedule:
-        - cron: "0 0 1 * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 1 * *"
 
 permissions:
-    contents: read
+  contents: read
 
 concurrency:
-    group: docker-publish
-    cancel-in-progress: false
+  group: docker-publish
+  cancel-in-progress: false
 
 jobs:
-    configuration:
-        runs-on: ubuntu-24.04
-        outputs:
-            image: ${{steps.image.outputs.DOCKER_IMAGE}}
-        steps:
-            - name: Checkout
-              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-            - name: Read image name
-              id: image
-              shell: bash
-              run: grep -m1 '^DOCKER_IMAGE=' .env >> "${GITHUB_OUTPUT}"
-
-    publish:
-        needs: configuration
-        strategy:
-            fail-fast: false
-            matrix:
-                variant:
-                    - tag: "8.2"
-                      build_args:
-                          PHP_VERSION: "8.2"
-                          DEBIAN: bookworm
-                    - tag: "8.3"
-                      latest: true
-                      build_args:
-                          PHP_VERSION: "8.3"
-                          DEBIAN: bookworm
-
-        uses: Faulo/workflows-docker/.github/workflows/publish.yml@v1
-        with:
-            image: ${{needs.configuration.outputs.image}}
-            tag: ${{matrix.variant.tag}}
-            latest: ${{matrix.variant.latest || false}}
-            build_args: ${{toJSON(matrix.variant.build_args)}}
-            linux_platforms: >-
-                {
-                  "linux/amd64":"ubuntu-24.04",
-                  "linux/arm64":"ubuntu-24.04-arm"
-                }
-        secrets:
-            DOCKERHUB_USERNAME: ${{secrets.DOCKERHUB_USERNAME}}
-            DOCKERHUB_TOKEN: ${{secrets.DOCKERHUB_TOKEN}}
-```
-
-Setting `latest` on the final matrix entry applies both merged tags in the same
-publication operation. In this example, `8.3` and `latest` therefore reference
-the exact same multi-platform image without running a second image build.
-
-Each matrix entry runs a Linux build and a Windows build in parallel. Given
-`DOCKER_IMAGE=farah` in `.env` and `tag: 8.2`, the workflow publishes:
-
-```text
-<DOCKERHUB_USERNAME>/farah:8.2-linux-amd64
-<DOCKERHUB_USERNAME>/farah:8.2-linux-arm64
-<DOCKERHUB_USERNAME>/farah:8.2-linux
-<DOCKERHUB_USERNAME>/farah:8.2-windows
-<DOCKERHUB_USERNAME>/farah:8.2
-```
-
-For an image without variants, keep the configuration job and call the workflow
-once. The tag defaults to `latest`:
-
-```yaml
-publish:
-    needs: configuration
-    uses: Faulo/workflows-docker/.github/workflows/publish.yml@v1
+  docker:
+    uses: Faulo/workflows-docker/.github/workflows/docker.yml@v2
     with:
-        image: ${{needs.configuration.outputs.image}}
+      config: docker.json
     secrets:
-        DOCKERHUB_USERNAME: ${{secrets.DOCKERHUB_USERNAME}}
-        DOCKERHUB_TOKEN: ${{secrets.DOCKERHUB_TOKEN}}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 ```
 
-To publish multiple Windows base variants in the same merged tag, pass a JSON
-array through `windows_variants`. Each entry gets its own cache and published
-platform tag:
+`config` is a required caller-relative file path. The workflow does not assume a
+fixed configuration location. The fleet uses `docker.json` to keep callers
+identical. This baseline builds on every push to `main`, on manual dispatch, and
+monthly. There are no project-specific trigger filters or test jobs.
 
-```yaml
-publish:
-    needs: configuration
-    uses: Faulo/workflows-docker/.github/workflows/publish.yml@v1
-    with:
-        image: ${{needs.configuration.outputs.image}}
-        windows_variants: >-
-            [
-              {"tag":"windows-1809","build_args":{"OS_BASE":"1809"}},
-              {"tag":"windows-20H2","build_args":{"OS_BASE":"20H2"}}
-            ]
-    secrets:
-        DOCKERHUB_USERNAME: ${{secrets.DOCKERHUB_USERNAME}}
-        DOCKERHUB_TOKEN: ${{secrets.DOCKERHUB_TOKEN}}
+Consumers supply Docker Hub login credentials and a token with push and temporary
+tag deletion permission. The publication namespace is configured independently of
+the login username, including organization namespaces.
+
+## Configuration
+
+The [JSON Schema](docker.schema.json) describes the configuration. Configuration
+schema version `1` is the first schema for workflow major version `2`.
+
+```json
+{
+  "schemaVersion": 1,
+  "namespace": "$DOCKER_NAMESPACE",
+  "image": "$DOCKER_IMAGE",
+  "context": ".",
+  "targets": [
+    {
+      "id": "linux-amd64",
+      "dockerfile": "linux/Dockerfile",
+      "runner": "ubuntu-latest"
+    },
+    {
+      "id": "windows-2019",
+      "dockerfile": "windows/Dockerfile",
+      "runner": "windows-latest",
+      "buildArgs": {"OS_BASE": "ltsc2019"}
+    }
+  ],
+  "variants": [{"tag": "latest"}]
+}
 ```
 
-This example publishes `latest-windows-1809` and `latest-windows-20H2`, combines
-both in `latest-windows`, then places that Windows platform set alongside
-`latest-linux` in `latest`.
+| Field | Meaning |
+| --- | --- |
+| `namespace` | Docker Hub publication namespace; usually `$DOCKER_NAMESPACE` |
+| `image` | Repository name without its namespace; usually `$DOCKER_IMAGE` |
+| `envFile` | Optional caller-relative dotenv path; defaults to `.env` when present |
+| `context` | Default build context, relative to the consumer root; defaults to `.` |
+| `buildArgs` | Optional build arguments shared by all product variants |
+| `targets` | Default targets for variants that do not define their own |
+| `variants` | Product variants, each with a required public `tag` |
+| Variant `aliases` | Additional public tags pointing to the same final index |
+| Variant `buildArgs` | Overrides for the shared build arguments |
+| Variant `targets` | Replaces the default targets for this product variant |
 
-Platform inputs are JSON objects mapping each Docker platform to the native
-GitHub Actions runner that builds it. Pass multiple entries through
-`linux_platforms` to publish more than the default `linux/amd64` platform:
+| Target field | Meaning |
+| --- | --- |
+| `id` | Unique lowercase identifier within the product variant |
+| `dockerfile` | Required Dockerfile path relative to the consumer root |
+| `context` | Optional override of the default build context |
+| `buildArgs` | Final overrides of global and product build arguments |
+| `runner` | Required runner string or label array; passed unchanged into `runs-on` |
+| `timeoutMinutes` | Build timeout, 180 by default; between 1 and 360 |
 
-```yaml
-with:
-    image: example
-    linux_platforms: >-
-        {
-          "linux/amd64":"ubuntu-24.04",
-          "linux/arm64":"ubuntu-24.04-arm"
-        }
+JSON string values support `$NAME` and `${NAME}` substitution. The configuration
+job reads the consumer's `.env` when present; `envFile` can select another file.
+An explicit `envFile` must exist. Process environment values override dotenv
+values. Missing variables fail configuration validation. Substitution happens
+once after JSON parsing, so quotes/backslashes in values cannot break JSON.
+Use `$$` for a literal dollar sign. Dotenv values are literal: shell commands and
+references inside them are never executed or recursively expanded. Quoted values,
+escaped quotes, `export` assignments, and comments are supported; multiline
+assignments are not supported. The schema checks raw structure; resolved names
+and semantic constraints are checked by the planner.
+
+Targets do not declare their OS, architecture, Windows release, or isolation.
+Runner labels are not interpreted or rewritten. At runtime, the workflow checks
+the runner OS/architecture against the Docker daemon and builds natively for
+Linux amd64/arm64 or Windows amd64. Image metadata supplies the Windows OS version.
+Build arguments and Dockerfiles select the image's LTSC release.
+
+The fleet examples use `ubuntu-latest`, `ubuntu-24.04-arm`, and `windows-latest`.
+Custom runner strings or label arrays work unchanged and require Python plus a
+working native Docker daemon. Linux runners must support Buildx and GitHub Actions
+cache access. Windows runners need Hyper-V isolation support. All Windows builds
+use `--isolation=hyperv`, allowing LTSC 2019 and 2022 images on a compatible newer
+host; the workflow does not choose a host based on the container release.
+
+One matrix covers all targets, including Windows-only and Linux-only projects.
+There are at most 256 entries and four concurrent builds. Linux Dockerfiles must
+support the runner's native architecture; choosing an arm64 runner does not make
+an x64 application portable.
+
+Build argument precedence is global, then variant, then target. Values are
+single-line strings, numbers, or booleans. Credentials belong in secrets, not
+build arguments. Unknown properties, invalid tags, duplicate public tags,
+duplicate target ids, and missing contexts/Dockerfiles fail before builds start.
+The schema handles structural validation; the planner also checks semantic
+constraints and the filesystem.
+
+## Product variants and Windows releases
+
+Product variants select the image's contents. Platforms select architecture and
+operating system compatibility underneath a product tag.
+
+- Farah's PHP releases are product variants: `7.4`, `8.0` through `8.5`. Only `8.5`
+  declares the `latest` alias. Each variant builds Linux amd64/arm64 and Windows
+  amd64.
+- Choco's `windows` and `windowsservercore` families are product variants. Each
+  contains Windows amd64 builds for LTSC 2019 and 2022. The proposed default is
+  `windows`, which declares `latest`; change that alias to select Server Core.
+- Ordinary projects have one product variant tagged `latest`.
+
+Different Windows base families must not share one product tag. A manifest cannot
+reliably choose full Windows versus Server Core when both match the same platform
+and OS release. After builds complete, targets with the same platform and Windows
+OS build prefix within one product variant are rejected before any public tag moves.
+
+Every product variant publishes only its declared tag and aliases. No `-linux`,
+`-windows`, architecture, or LTSC compatibility tags are created. Existing
+downstream Dockerfiles and Jenkins configurations referencing those old tags must
+be migrated. A Windows release is selected from the manifest by the runtime's
+platform matching; applications that need an exact base can pin an image digest.
+
+Proposed configurations for all nine consumers are in [examples/fleet](examples/fleet).
+They preserve the currently requested architecture coverage; only Farah currently
+requests arm64. Choco's migration additionally requires moving SHELL32 proxy
+generation into Dockerfile stages before adopting the thin caller.
+
+## Publication behavior
+
+Linux builds publish by digest, use GitHub Actions layer caching, and include
+provenance and SBOM attestations. Windows builds use the previous product tag as a
+best-effort layer cache and push to a reserved, run-specific staging tag. Windows
+platform metadata and a nonempty OS version are checked before pushing.
+
+Build results and the publication plan are passed between jobs as short-lived
+artifacts. All configured builds must succeed before public tags move. The
+publisher inspects every immutable source digest and dry-runs every product index
+before publication. It preserves Linux attestations and Windows OS metadata,
+then verifies each public tag against the expected image digests and platforms.
+Aliases must reference the same final index digest as their product tag. A
+publication summary lists the resulting tags, index digests, and image platforms.
+
+Windows staging tags begin with reserved `wf-v2-` names and are deleted after
+publication or a build failure, including earlier attempts of the same run. Because
+runner labels are opaque, cleanup checks reserved staging names for all targets;
+Linux names return 404. A
+cleanup failure is reported as a workflow failure. Runner loss or cancellation
+can interrupt cleanup, and untagged image blobs remain subject to Docker Hub's
+retention policy. Cleanup never deletes historical or configured public tags.
+
+Publications are serialized per consumer repository. Caller and callee use
+different concurrency groups to avoid cancelling one another. Multiple product
+publications are not a registry-wide transaction: a registry failure during
+publication can leave earlier products updated. Verification detects failures;
+rerunning the workflow completes publication.
+
+The workflow checks out its implementation using `job.workflow_repository` and
+`job.workflow_sha`, so helpers match the exact called workflow revision, including
+when a consumer pins to an immutable SHA. Caller source and workflow helpers use
+separate directories, keeping helper files out of Docker build contexts. These
+workflow identity contexts require GitHub.com; GitHub Enterprise Server is not
+supported by this implementation.
+
+## Development checks
+
+The implementation uses Python's standard library on runners. Run its focused
+configuration, publication, and cleanup tests locally:
+
+```powershell
+python -m unittest discover -s tests -v
 ```
 
-Windows base variants and platforms are independent dimensions. Every platform
-in `windows_platforms` is built for every entry in `windows_variants`. Microsoft
-currently publishes Windows container base images for amd64 only:
+Lint Python with Ruff. Lint the new reusable workflow and canonical caller with
+actionlint. Version 1.7.12 does not yet recognize the documented
+`job.workflow_repository` and `job.workflow_sha` properties; suppress only those
+two diagnostics:
 
-```yaml
-with:
-    image: example
-    windows_platforms: '{"windows/amd64":"windows-2022"}'
+```powershell
+actionlint -ignore 'property "workflow_(repository|sha)" is not defined' .github/workflows/docker.yml examples/docker.yml
 ```
 
-Linux platform tags include the architecture when several targets are requested,
-for example `latest-linux-amd64` and `latest-linux-arm64`, and are combined in
-`latest-linux`. With only one target, the architecture suffix is omitted and the
-platform image itself is the `latest-linux` compatibility tag.
-
-## Requirements
-
-The calling repository must define these GitHub Actions secrets:
-
-- `DOCKERHUB_USERNAME`: Docker Hub username and image namespace.
-- `DOCKERHUB_TOKEN`: Docker Hub access token with push permission.
-
-The calling workflow must pass the Docker Hub repository name through `image`.
-The example reads it from the caller's root `.env`:
-
-```dotenv
-DOCKER_IMAGE=example
-```
-
-By default, the workflow expects:
-
-```text
-linux/Dockerfile
-windows/Dockerfile
-```
-
-The Linux image is built for `linux/amd64` on `ubuntu-24.04` by default. The
-default Windows platform is `windows/amd64`, built on the GitHub-hosted
-`windows-2022` runner using Hyper-V isolation. Each additional target requires
-a native runner with a working Docker daemon.
-
-Build argument names must be valid Docker `ARG` identifiers. Values should be
-JSON scalars; strings are recommended.
-
-## Inputs
-
-| Input | Required | Default | Description |
-| --- | --- | --- | --- |
-| `image` | yes | none | Docker Hub repository name without the namespace |
-| `tag` | no | `latest` | Tag for the merged image |
-| `latest` | no | `false` | Also apply the `latest` tag to the same merged image |
-| `build_args` | no | `{}` | JSON object containing Docker build arguments |
-| `linux_platforms` | no | `{"linux/amd64":"ubuntu-24.04"}` | JSON object mapping Linux Docker platforms to native runner labels |
-| `windows_variants` | no | `[{"tag":"windows","build_args":{}}]` | JSON array of Windows tag suffixes and variant-specific build arguments |
-| `windows_platforms` | no | `{"windows/amd64":"windows-2022"}` | JSON object mapping the Windows amd64 Docker platform to its native runner label |
-| `linux_context` | no | `linux` | Linux build context |
-| `linux_dockerfile` | no | `linux/Dockerfile` | Linux Dockerfile path |
-| `windows_context` | no | `windows` | Windows build context |
-| `windows_dockerfile` | no | `windows/Dockerfile` | Windows Dockerfile path |
-
-Override paths when a project uses a different layout:
-
-```yaml
-with:
-    image: example
-    build_args: ${{toJSON(matrix.variant.build_args)}}
-    linux_context: docker
-    linux_dockerfile: docker/Dockerfile.linux
-    windows_context: docker
-    windows_dockerfile: docker/Dockerfile.windows
-```
-
-## Publication Behavior
-
-Publication is serialized per calling repository and tag. Calling workflows
-should also use workflow-level concurrency, as shown above, to queue consecutive
-runs. A merged tag is updated only after the Linux build and every Windows
-variant succeed. When `latest` is enabled, the primary and `latest` tags are
-applied by the same merge operation and verified to contain the same manifest.
-Every publication also produces `<tag>-linux`, `<tag>-windows`, and
-`<tag>-<windows-variant>` compatibility tags. When `latest` is enabled for a
-different primary tag, the equivalent `latest-*` aliases are published without
-rebuilding the images. The merge job also verifies that the resulting manifest
-contains every requested Linux platform plus every requested Windows architecture
-and the expected number of distinct Windows OS versions for each architecture.
-Temporary Windows manifest-wrapper tags used during the merge are deleted after
-the final manifest has been verified.
-
-Linux targets build independently on their configured native runners, use
-GitHub Actions caching, and publish provenance and SBOM attestations. The
-Windows build restores its previous platform image as a Docker layer cache.
-
-## Versioning
-
-Use the moving major tag for compatible updates:
-
-```yaml
-uses: Faulo/workflows-docker/.github/workflows/publish.yml@v1
-```
-
-For an immutable reference, use a release tag such as `v1.0.0` or a full commit
-SHA. Breaking input or behavior changes will use a new major version.
+Schema validation can additionally use `jsonschema` during development. Actual
+native builds and publication require compatible runners and registry secrets;
+local unit tests do not establish end-to-end publication coverage.

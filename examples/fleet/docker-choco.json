@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "namespace": "$DOCKER_NAMESPACE",
+  "image": "$DOCKER_IMAGE",
+  "context": ".",
+  "variants": [
+    {
+      "tag": "windows",
+      "aliases": [
+        "latest"
+      ],
+      "targets": [
+        {
+          "id": "windows-2019",
+          "dockerfile": "windows/Dockerfile",
+          "runner": "windows-latest",
+          "buildArgs": {
+            "OS_BASE": "ltsc2019",
+            "BASE_IMAGE": "mcr.microsoft.com/windows:ltsc2019"
+          }
+        },
+        {
+          "id": "windows-2022",
+          "dockerfile": "windows/Dockerfile",
+          "runner": "windows-latest",
+          "buildArgs": {
+            "OS_BASE": "ltsc2022",
+            "BASE_IMAGE": "mcr.microsoft.com/windows/server:ltsc2022"
+          }
+        }
+      ]
+    },
+    {
+      "tag": "windowsservercore",
+      "targets": [
+        {
+          "id": "windows-2019",
+          "dockerfile": "windows/Dockerfile",
+          "runner": "windows-latest",
+          "buildArgs": {
+            "OS_BASE": "ltsc2019",
+            "BASE_IMAGE": "mcr.microsoft.com/windows/servercore:ltsc2019"
+          }
+        },
+        {
+          "id": "windows-2022",
+          "dockerfile": "windows/Dockerfile",
+          "runner": "windows-latest",
+          "buildArgs": {
+            "OS_BASE": "ltsc2022",
+            "BASE_IMAGE": "mcr.microsoft.com/windows/servercore:ltsc2022"
+          }
+        }
+      ]
+    }
+  ]
+}

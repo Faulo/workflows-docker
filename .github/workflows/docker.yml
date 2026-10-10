@@ -1,0 +1,201 @@
+name: Build and publish Docker images (v2)
+
+on:
+  workflow_call:
+    inputs:
+      config:
+        description: JSON configuration path relative to the caller repository root
+        required: true
+        type: string
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+# Keep a complete publication serialized within each consumer. Use a different
+# group from the caller's workflow-level concurrency group.
+concurrency:
+  group: docker-v2-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  configuration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.plan.outputs.image }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Checkout caller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: source
+          persist-credentials: false
+      - name: Checkout workflow implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: workflow
+          persist-credentials: false
+      - name: Validate and expand configuration
+        id: plan
+        working-directory: source
+        env:
+          CONFIG_PATH: ${{ inputs.config }}
+        run: python ../workflow/scripts/configure.py --config "$CONFIG_PATH" --output ../plan/plan.json
+      - name: Store publication plan
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: docker-v2-plan
+          path: plan/plan.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  build:
+    needs: configuration
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.configuration.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.timeoutMinutes }}
+    env:
+      IMAGE: ${{ needs.configuration.outputs.image }}
+      BUILD_ENTRY: ${{ toJSON(matrix) }}
+      RECORD_DIRECTORY: ${{ github.workspace }}/docker-v2-records/${{ github.run_id }}/${{ github.run_attempt }}/${{ matrix.id }}
+    steps:
+      - name: Checkout caller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: source
+          persist-credentials: false
+      - name: Checkout workflow implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: workflow
+          persist-credentials: false
+      - name: Ensure Windows Docker is running
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $service = Get-Service docker
+          if ($service.Status -ne 'Running') { Start-Service docker }
+          for ($attempt = 1; $attempt -le 24; $attempt++) {
+            $os = docker --context default info --format '{{.OSType}}' 2>$null
+            if ($LASTEXITCODE -eq 0 -and $os.Trim() -eq 'windows') { break }
+            if ($attempt -eq 24) { throw 'Windows Docker daemon not ready after 120 seconds' }
+            Start-Sleep -Seconds 5
+          }
+      - name: Detect native platform
+        id: platform
+        shell: python
+        run: |
+          import runpy
+          import sys
+          sys.path.insert(0, 'workflow/scripts')
+          runpy.run_path('workflow/scripts/detect_platform.py', run_name='__main__')
+      - name: Set up Buildx
+        if: runner.os == 'Linux'
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - name: Login to Docker Hub
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push Linux image by digest
+        if: runner.os == 'Linux'
+        id: linux
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: source/${{ matrix.context }}
+          file: source/${{ matrix.dockerfile }}
+          platforms: ${{ steps.platform.outputs.platform }}
+          build-args: ${{ matrix.buildArgsText }}
+          tags: ${{ env.IMAGE }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          pull: true
+          cache-from: type=gha,scope=v2-${{ matrix.variant }}-${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=v2-${{ matrix.variant }}-${{ matrix.target }}
+          provenance: mode=max
+          sbom: true
+      - name: Record Linux image digest
+        if: runner.os == 'Linux'
+        env:
+          IMAGE_DIGEST: ${{ steps.linux.outputs.digest }}
+          BUILD_PLATFORM: ${{ steps.platform.outputs.platform }}
+        run: python workflow/scripts/record_linux.py
+      - name: Build and push Windows image
+        if: runner.os == 'Windows'
+        working-directory: source
+        shell: pwsh
+        env:
+          BUILD_PLATFORM: ${{ steps.platform.outputs.platform }}
+        run: |
+          python ../workflow/scripts/build_windows.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Store build result
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: docker-v2-record-${{ matrix.id }}
+          path: ${{ env.RECORD_DIRECTORY }}/*.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  publication:
+    needs: [configuration, build]
+    if: always() && needs.configuration.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+    steps:
+      - name: Checkout workflow implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: workflow
+          persist-credentials: false
+      - name: Download publication plan
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: docker-v2-plan
+          path: plan
+      - name: Check required builds
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          if [[ "$BUILD_RESULT" != success ]]; then
+            echo 'Required image builds failed or were cancelled; public tags will not be updated.' >&2
+            exit 1
+          fi
+      - name: Download build results
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: docker-v2-record-*
+          merge-multiple: true
+          path: records
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - name: Login to Docker Hub
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Publish and verify public tags
+        run: python workflow/scripts/publish.py --plan plan/plan.json --records records
+      - name: Delete Windows staging tags
+        if: always()
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: python workflow/scripts/cleanup.py --plan plan/plan.json
