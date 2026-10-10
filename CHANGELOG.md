@@ -7,6 +7,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [3.0.2] - 2026-10-10
+
+### Fixed
+
+- Show the variant before the target in build log groups, results, and errors,
+  matching the published image tag order.
+
 ## [3.0.1] - 2026-10-10
 
 ### Fixed
@@ -200,7 +207,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   verification after both builds succeed.
 - Serialized publication and usage documentation.
 
-[Unreleased]: https://github.com/Faulo/workflows-docker/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/Faulo/workflows-docker/compare/v3.0.2...HEAD
+[3.0.2]: https://github.com/Faulo/workflows-docker/compare/v3.0.1...v3.0.2
+[3.0.1]: https://github.com/Faulo/workflows-docker/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/Faulo/workflows-docker/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/Faulo/workflows-docker/compare/v2.0.1...v2.1.0
 [2.0.1]: https://github.com/Faulo/workflows-docker/compare/v2.0.0...v2.0.1

@@ -127,7 +127,7 @@ def record_results(
             record,
         )
         print(
-            f"Built {build['target']} × {build['variant']}: {digest} ({expected})",
+            f"Built {build['variant']} × {build['target']}: {digest} ({expected})",
             flush=True,
         )
 
@@ -136,7 +136,7 @@ def classic(plan, group_id, platform, directory, publish=True):
     _, builds = group_builds(plan, group_id)
     failed = []
     for index, build in enumerate(builds):
-        print(f"::group::{build['target']} × {build['variant']}", flush=True)
+        print(f"::group::{build['variant']} × {build['target']}", flush=True)
         os.environ.update(
             IMAGE=plan["reference"],
             BUILD_ENTRY=json.dumps(build),
@@ -167,13 +167,13 @@ def classic(plan, group_id, platform, directory, publish=True):
                 )
                 write_json(Path(directory) / f"{build['id']}.json", record)
                 print(
-                    f"Built {build['target']} × {build['variant']}: {record['digest']} ({record['platform']})",
+                    f"Built {build['variant']} × {build['target']}: {record['digest']} ({record['platform']})",
                     flush=True,
                 )
         except (subprocess.CalledProcessError, ValueError) as error:
             failed.append(build["id"])
             print(
-                f"::error::{build['target']} × {build['variant']}: {error}", flush=True
+                f"::error::{build['variant']} × {build['target']}: {error}", flush=True
             )
         finally:
             print("::endgroup::", flush=True)
