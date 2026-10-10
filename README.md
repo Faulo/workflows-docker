@@ -15,6 +15,8 @@ Use `v2` for compatible updates, or a version tag / full commit SHA for an immut
 reference. The existing `publish.yml` interface remains available for v1 consumers;
 its documentation is in [docs/v1.md](docs/v1.md).
 
+See the [changelog](CHANGELOG.md) for release history and migration notes.
+
 ## Quick start
 
 Copy [examples/docker.yml](examples/docker.yml) to `.github/workflows/docker.yml`:
