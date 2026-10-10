@@ -7,6 +7,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+
+- Record large Linux Bake metadata without exceeding the operating system's
+  environment-variable size limit.
+
 ### Added
 
 - Monthly Dependabot updates for SHA-pinned GitHub Actions, grouped into one pull

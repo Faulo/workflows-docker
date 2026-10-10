@@ -155,13 +155,14 @@ jobs:
         if: runner.os == 'Linux'
         shell: python
         env:
-          BAKE_METADATA: ${{ steps.bake.outputs.metadata }}
           GROUP_ID: ${{ matrix.id }}
           BUILD_PLATFORM: ${{ steps.platform.outputs.platform }}
           PUBLISH: ${{ inputs.publish }}
         run: |
           import os, pathlib, subprocess
-          pathlib.Path('bake/metadata.json').write_text(os.environ['BAKE_METADATA'], encoding='utf-8')
+          # JSON string encoding safely embeds the output in the script file,
+          # avoiding Linux's size limit for a single environment variable.
+          pathlib.Path('bake/metadata.json').write_text(${{ toJSON(steps.bake.outputs.metadata) }}, encoding='utf-8')
           subprocess.run(['python', 'workflow/scripts/build_group.py', 'record', '--plan', 'plan/plan.json', '--group', os.environ['GROUP_ID'], '--platform', os.environ['BUILD_PLATFORM'], '--publish', os.environ['PUBLISH'], '--directory', os.environ['RECORD_DIRECTORY']], check=True)
       - name: Build Windows variants with shared local cache
         if: runner.os == 'Windows'
