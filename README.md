@@ -6,7 +6,7 @@ native builds, caching, registry login, publication, manifest verification, and
 temporary tag cleanup. Project tests run in Jenkins. Image preparation belongs in
 the project's Dockerfile, including compilation in intermediate stages.
 
-Use `v2` for compatible updates, or `v2.0.0` / a full commit SHA for an immutable
+Use `v2` for compatible updates, or a version tag / full commit SHA for an immutable
 reference. The existing `publish.yml` interface remains available for v1 consumers;
 its documentation is in [docs/v1.md](docs/v1.md).
 
@@ -98,7 +98,7 @@ schema version `1` is the first schema for workflow major version `2`.
 | `context` | Optional override of the default build context |
 | `buildArgs` | Final overrides of global and product build arguments |
 | `runner` | Required runner string or label array; passed unchanged into `runs-on` |
-| `timeoutMinutes` | Build timeout, 180 by default; between 1 and 360 |
+| `timeoutMinutes` | Entire target job timeout, 180 by default; between 1 and 360 |
 
 JSON string values support `$NAME` and `${NAME}` substitution. The configuration
 job reads the consumer's `.env` when present; `envFile` can select another file.
@@ -125,7 +125,10 @@ use `--isolation=hyperv`, allowing LTSC 2019 and 2022 images on a compatible new
 host; the workflow does not choose a host based on the container release.
 
 One matrix covers all targets, including Windows-only and Linux-only projects.
-There are at most 256 entries and four concurrent builds. Linux Dockerfiles must
+Each target gets one job containing all its product variants, with at most 256
+target jobs and four concurrent jobs. Repeated target IDs across variants must
+use the same runner and timeout; their Dockerfiles, contexts, and build arguments
+can differ. Linux Dockerfiles must
 support the runner's native architecture; choosing an arm64 runner does not make
 an x64 application portable.
 
@@ -167,10 +170,31 @@ generation into Dockerfile stages before adopting the thin caller.
 
 ## Publication behavior
 
-Linux builds publish by digest, use GitHub Actions layer caching, and include
-provenance and SBOM attestations. Windows builds use the previous product tag as a
-best-effort layer cache and push to a reserved, run-specific staging tag. Windows
-platform metadata and a nonempty OS version are checked before pushing.
+Linux target jobs generate one Buildx Bake definition for all their variants.
+They share one builder, publish by digest, use GitHub Actions layer caching, and
+include provenance and SBOM attestations. Every variant imports the target's
+sibling caches, while each owns a distinct cache export scope. BuildKit executes
+at most two build operations concurrently per runner. Identical compiler stages
+and common layers can be reused within a target when their inputs match.
+
+Windows target jobs build variants sequentially on one Docker daemon by default,
+retaining intermediate compiler stages locally. They use the previous product
+tag as a best-effort cache across runs and push to run-specific staging tags.
+Final-image caching does not retain separate compiler stages across fresh runners.
+Windows platform metadata and a nonempty OS version are checked before pushing.
+
+The optional workflow input `windows-builder: buildkit` enables experimental
+Windows Bake builds using an isolated containerd instance, CNI networking, and
+BuildKit v0.34.0 with Hyper-V isolation. It leaves the runner's Docker service
+intact. Windows BuildKit images publish by digest without attestations; their
+actual OS version is obtained from the resulting registry image configuration.
+The default `classic` builder remains available for Dockerfiles requiring it.
+
+For builder validation, workflow input `publish: false` builds disposable `tmp/`
+images and skips image pushes, public tag updates, and publication cleanup. Bake
+exports local OCI archives and verifies their platform metadata. Classic Windows
+builds retain local images and verify their metadata. This validates image
+construction; project tests continue to run outside this pipeline.
 
 Build results and the publication plan are passed between jobs as short-lived
 artifacts. All configured builds must succeed before public tags move. The

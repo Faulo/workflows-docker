@@ -52,7 +52,10 @@ disabled_plugins = ["io.containerd.grpc.v1.cri"]
 [grpc]
   address = "\\\\.\\pipe\\docker-v2-containerd"
 "@ | Set-Content -LiteralPath $containerdConfig -Encoding utf8
-$containerdProcess = Start-Process -FilePath (Join-Path $binaryPath 'containerd.exe') -ArgumentList @('--config', ('"' + $containerdConfig + '"')) -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $taskRoot 'containerd.stdout.log') -RedirectStandardError (Join-Path $taskRoot 'containerd.stderr.log')
+# Services survive GitHub's per-step process cleanup; child processes do not.
+& (Join-Path $binaryPath 'containerd.exe') --register-service --service-name docker-v2-containerd --config $containerdConfig --log-file (Join-Path $taskRoot 'containerd.log')
+if ($LASTEXITCODE -ne 0) { throw 'Cannot register isolated containerd service' }
+Start-Service docker-v2-containerd
 
 $buildkitConfig = Join-Path $taskRoot 'buildkitd.toml'
 $buildkitRoot = (Join-Path $taskRoot 'buildkit-root').Replace('\', '\\')
@@ -77,18 +80,20 @@ root = "$buildkitRoot"
 for ($attempt = 1; $attempt -le 30; $attempt++) {
     & (Join-Path $binaryPath 'ctr.exe') --address '\\.\pipe\docker-v2-containerd' version 2>$null
     if ($LASTEXITCODE -eq 0) { break }
-    if ($containerdProcess.HasExited -or $attempt -eq 30) {
-        Get-Content (Join-Path $taskRoot 'containerd.stderr.log')
+    if ((Get-Service docker-v2-containerd).Status -ne 'Running' -or $attempt -eq 30) {
+        Get-Content (Join-Path $taskRoot 'containerd.log')
         throw 'Isolated containerd failed to start'
     }
     Start-Sleep -Seconds 2
 }
-$buildkitProcess = Start-Process -FilePath (Join-Path $binaryPath 'buildkitd.exe') -ArgumentList @('--config', ('"' + $buildkitConfig + '"')) -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $taskRoot 'buildkit.stdout.log') -RedirectStandardError (Join-Path $taskRoot 'buildkit.stderr.log')
+& (Join-Path $binaryPath 'buildkitd.exe') --register-service --service-name docker-v2-buildkitd --config $buildkitConfig --log-file (Join-Path $taskRoot 'buildkit.log')
+if ($LASTEXITCODE -ne 0) { throw 'Cannot register WCOW BuildKit service' }
+Start-Service docker-v2-buildkitd
 for ($attempt = 1; $attempt -le 30; $attempt++) {
     & (Join-Path $binaryPath 'buildctl.exe') --addr 'npipe:////./pipe/docker-v2-buildkitd' debug workers 2>$null
     if ($LASTEXITCODE -eq 0) { break }
-    if ($buildkitProcess.HasExited -or $attempt -eq 30) {
-        Get-Content (Join-Path $taskRoot 'buildkit.stderr.log')
+    if ((Get-Service docker-v2-buildkitd).Status -ne 'Running' -or $attempt -eq 30) {
+        Get-Content (Join-Path $taskRoot 'buildkit.log')
         throw 'WCOW BuildKit failed to start'
     }
     Start-Sleep -Seconds 2
