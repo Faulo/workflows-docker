@@ -143,7 +143,7 @@ def record_results(
 def classic(plan, group_id, platform, directory, publish=True):
     _, builds = group_builds(plan, group_id)
     failed = []
-    for build in builds:
+    for index, build in enumerate(builds):
         print(f"::group::{build['target']} × {build['variant']}", flush=True)
         os.environ.update(
             IMAGE=plan["reference"],
@@ -153,13 +153,11 @@ def classic(plan, group_id, platform, directory, publish=True):
         )
         try:
             if publish:
-                build_windows.main()
+                build_windows.main(use_local_cache=index > 0)
             else:
                 image = f"tmp/{plan['image']}:{build['target']}-{build['variant']}"
                 build_windows.docker(
-                    *build_windows.build_command(
-                        {**build, "platform": platform}, image, image
-                    )
+                    *build_windows.build_command({**build, "platform": platform}, image)
                 )
                 config = json.loads(
                     build_windows.docker("image", "inspect", image, capture=True).stdout

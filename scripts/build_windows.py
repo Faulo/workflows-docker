@@ -25,26 +25,26 @@ def staging_tag(build_id, run_id, attempt):
     return f"wf-v2-{run_id}-{attempt}-{build_id}"
 
 
-def build_command(entry, target_image, cache_image):
+def build_command(entry, target_image, cache_image=None):
     args = [
         "build",
         "--isolation=hyperv",
         "--platform",
         entry["platform"],
         "--pull",
-        "--cache-from",
-        cache_image,
         "--file",
         entry["dockerfile"],
         "--tag",
         target_image,
     ]
+    if cache_image:
+        args.extend(["--cache-from", cache_image])
     for key, value in entry["buildArgs"].items():
         args.extend(["--build-arg", f"{key}={value}"])
     return [*args, entry["context"]]
 
 
-def main():
+def main(use_local_cache=False):
     entry = {
         **json.loads(os.environ["BUILD_ENTRY"]),
         "platform": os.environ["BUILD_PLATFORM"],
@@ -56,8 +56,14 @@ def main():
     target_image = f"{image}:{tag}"
     cache_image = f"{image}:{entry['variant']}"
     # A cold cache or an incompatible previous manifest must not prevent a build.
-    docker("image", "pull", cache_image, check=False)
-    docker(*build_command(entry, target_image, cache_image))
+    pulled = docker("image", "pull", cache_image, check=False)
+    # Legacy --cache-from restricts eligible local layers to that image's
+    # ancestry, excluding compiler stages. Sibling builds need unrestricted
+    # local cache; a missing remote cache must not disable it either.
+    cache_source = (
+        cache_image if pulled.returncode == 0 and not use_local_cache else None
+    )
+    docker(*build_command(entry, target_image, cache_source))
     inspection = json.loads(
         docker("image", "inspect", target_image, capture=True).stdout
     )[0]

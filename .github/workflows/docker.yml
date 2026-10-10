@@ -82,6 +82,7 @@ jobs:
     timeout-minutes: ${{ matrix.timeoutMinutes }}
     env:
       IMAGE: ${{ needs.configuration.outputs.image }}
+      PYTHONUTF8: "1"
       RECORD_DIRECTORY: ${{ github.workspace }}/docker-v2-records/${{ github.run_id }}/${{ github.run_attempt }}/${{ matrix.id }}
     steps:
       - name: Checkout caller

@@ -3,9 +3,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from build_group import bake_definition, record_results
+from build_group import bake_definition, classic, record_results
+from build_windows import build_command
 from configure import make_plan
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +24,27 @@ def plan(project):
 
 
 class GroupTests(unittest.TestCase):
+    def test_classic_siblings_use_local_cache_and_continue_after_failure(self):
+        candidate = plan("choco")
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("os.environ", {}),
+            patch(
+                "build_group.build_windows.main",
+                side_effect=[ValueError("first variant failed"), None],
+            ) as build,
+        ):
+            with self.assertRaisesRegex(ValueError, "Required builds failed: b000"):
+                classic(candidate, "g000", "windows/amd64", directory)
+            self.assertEqual(
+                [False, True],
+                [call.kwargs["use_local_cache"] for call in build.call_args_list],
+            )
+
+    def test_unrestricted_classic_cache_does_not_specify_cache_from(self):
+        build = {**plan("choco")["builds"][0], "platform": "windows/amd64"}
+        self.assertNotIn("--cache-from", build_command(build, "tmp/choco:trial"))
+
     def test_sibling_caches_are_imported_but_have_distinct_export_owners(self):
         definition = bake_definition(plan("farah"), "g000", "linux/amd64")
         targets = list(definition["target"].values())
