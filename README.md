@@ -246,8 +246,9 @@ The fixture exercises an explicit configuration path, dotenv substitution,
 global/variant/target build arguments, native architectures, shared stages, and
 Windows release selection.
 
-Run the **Test image** workflow manually, or push changes to its tracked workflow,
-scripts, or fixture paths. It calls the same reusable workflow with
+The **Test image** workflow runs on pull requests and pushes to `main` that change
+its tracked workflows, scripts, or fixture paths, and supports manual dispatch.
+It calls the same reusable workflow with
 `publish: false`, without registry secrets. A final verification job checks all
 eight metadata records, their native platforms, Windows OS versions, and labels
 carrying the selected variant and substituted arguments. Images remain on the
@@ -256,6 +257,11 @@ Registry publication and manifest assembly remain covered separately by the
 publisher tests.
 
 ## Development checks
+
+Dependabot checks GitHub Actions dependencies weekly and groups available updates
+into one pull request. Action references remain pinned to commit SHAs. Updates to
+the v2 workflow and its validation workflow are checked by the unpublished
+example builds.
 
 The implementation uses Python's standard library on runners. Run its focused
 configuration, publication, and cleanup tests locally:
