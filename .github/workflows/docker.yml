@@ -58,6 +58,7 @@ jobs:
           retention-days: 7
 
   build:
+    name: ${{ matrix.target }} × ${{ matrix.variant }}
     needs: configuration
     strategy:
       fail-fast: false
