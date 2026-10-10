@@ -1,4 +1,3 @@
-import json
 import sys
 import tempfile
 import unittest
@@ -8,24 +7,19 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from build_group import bake_definition, classic, local_result
 from build_windows import build_command
+from configuration_fixtures import example
 from configure import make_plan
 
-ROOT = Path(__file__).resolve().parents[1]
 DIGEST = "sha256:" + "1" * 64
 
 
-def plan(project):
-    config = json.loads(
-        (ROOT / "examples" / "fleet" / f"docker-{project}.json").read_text()
-    )
-    return make_plan(
-        config, environment={"DOCKER_NAMESPACE": "faulo", "DOCKER_IMAGE": project}
-    )
+def plan(kind):
+    return make_plan(example(kind))
 
 
 class GroupTests(unittest.TestCase):
     def test_classic_siblings_use_local_cache_and_continue_after_failure(self):
-        candidate = plan("choco")
+        candidate = plan("windows-families")
         with (
             tempfile.TemporaryDirectory() as directory,
             patch("os.environ", {}),
@@ -42,24 +36,24 @@ class GroupTests(unittest.TestCase):
             )
 
     def test_unrestricted_classic_cache_does_not_specify_cache_from(self):
-        build = {**plan("choco")["builds"][0], "platform": "windows/amd64"}
-        self.assertNotIn("--cache-from", build_command(build, "tmp/choco:trial"))
+        build = {**plan("windows-families")["builds"][0], "platform": "windows/amd64"}
+        self.assertNotIn("--cache-from", build_command(build, "tmp/app:trial"))
 
     def test_sibling_caches_are_imported_but_have_distinct_export_owners(self):
-        definition = bake_definition(plan("farah"), "g000", "linux/amd64")
+        definition = bake_definition(plan("multi-platform"), "g000", "linux/amd64")
         targets = list(definition["target"].values())
         self.assertEqual(7, len(targets))
         self.assertTrue(all(len(target["cache-from"]) == 7 for target in targets))
         self.assertEqual(7, len({target["cache-to"][0] for target in targets}))
         self.assertEqual(
-            {"7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"},
-            {target["args"]["PHP_VERSION"] for target in targets},
+            {f"1.{minor}" for minor in range(7)},
+            {target["args"]["APP_VERSION"] for target in targets},
         )
 
     def test_trial_builds_export_archives_without_pushing(self):
-        targets = bake_definition(plan("farah"), "g000", "linux/amd64", publish=False)[
-            "target"
-        ]
+        targets = bake_definition(
+            plan("multi-platform"), "g000", "linux/amd64", publish=False
+        )["target"]
         self.assertEqual(["type=oci,dest=bake/b000.tar"], targets["b000"]["output"])
 
     def test_windows_records_require_actual_os_version(self):

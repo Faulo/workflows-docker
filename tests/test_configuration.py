@@ -1,41 +1,28 @@
 import copy
-import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from configuration_fixtures import example
 from configure import make_plan, read_env, relative_path, resolve_config, substitute
 from detect_platform import native_platform
 
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def example(name="docker-farah"):
-    config = json.loads(
-        (ROOT / "examples" / "fleet" / f"{name}.json").read_text(encoding="utf-8")
-    )
-    return {**config, "namespace": "faulo", "image": name.removeprefix("docker-")}
-
 
 class ConfigurationTests(unittest.TestCase):
-    def test_all_fleet_plans(self):
-        expected = {"choco": 4, "farah": 21, "unreal": 1}
-        for path in (ROOT / "examples" / "fleet").glob("*.json"):
-            with self.subTest(project=path.stem):
-                config = json.loads(path.read_text(encoding="utf-8"))
+    def test_supported_configuration_shapes(self):
+        expected = {"multi-platform": 21, "windows-families": 4, "windows-only": 1}
+        for kind, build_count in expected.items():
+            with self.subTest(kind=kind):
+                config = example(kind)
+                config.update(namespace="$DOCKER_NAMESPACE", image="$DOCKER_IMAGE")
                 plan = make_plan(
                     config,
-                    environment={
-                        "DOCKER_NAMESPACE": "faulo",
-                        "DOCKER_IMAGE": path.stem.removeprefix("docker-"),
-                    },
+                    environment={"DOCKER_NAMESPACE": "example", "DOCKER_IMAGE": "app"},
                 )
-                self.assertEqual(expected.get(plan["image"], 2), len(plan["builds"]))
-                self.assertEqual(
-                    f"faulo/{path.stem.removeprefix('docker-')}", plan["reference"]
-                )
+                self.assertEqual(build_count, len(plan["builds"]))
+                self.assertEqual("example/app", plan["reference"])
                 self.assertEqual(
                     1,
                     sum(
@@ -44,18 +31,18 @@ class ConfigurationTests(unittest.TestCase):
                     ),
                 )
 
-    def test_farah_platforms_and_latest(self):
+    def test_multi_platform_variants_and_latest(self):
         plan = make_plan(example())
-        self.assertEqual(["8.5", "latest"], plan["publications"][-1]["tags"])
+        self.assertEqual(["1.6", "latest"], plan["publications"][-1]["tags"])
         self.assertEqual(
             {"ubuntu-latest", "ubuntu-24.04-arm", "windows-latest"},
             {build["runner"] for build in plan["builds"]},
         )
-        self.assertEqual("8.0", plan["builds"][3]["buildArgs"]["PHP_VERSION"])
+        self.assertEqual("1.1", plan["builds"][3]["buildArgs"]["APP_VERSION"])
         self.assertEqual("ubuntu-24.04-arm", plan["builds"][1]["runner"])
 
-    def test_choco_families_are_separate_publications(self):
-        plan = make_plan(example("docker-choco"))
+    def test_windows_families_are_separate_publications(self):
+        plan = make_plan(example("windows-families"))
         self.assertEqual(
             [["windows", "latest"], ["windowsservercore"]],
             [publication["tags"] for publication in plan["publications"]],
@@ -74,7 +61,7 @@ class ConfigurationTests(unittest.TestCase):
         )
 
     def test_windows_only(self):
-        plan = make_plan(example("docker-unreal"))
+        plan = make_plan(example("windows-only"))
         self.assertTrue(
             all(build["runner"] == "windows-latest" for build in plan["builds"])
         )
@@ -105,7 +92,7 @@ class ConfigurationTests(unittest.TestCase):
             make_plan(config)
 
     def test_duplicate_target_ids_rejected(self):
-        config = example("docker-choco")
+        config = example("windows-families")
         config["variants"][0]["targets"].append(
             copy.deepcopy(config["variants"][0]["targets"][0])
         )
@@ -170,17 +157,17 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(3, len(plan["groups"]))
         self.assertTrue(all(len(group["builds"]) == 7 for group in plan["groups"]))
         self.assertEqual(21, sum(len(group["builds"]) for group in plan["groups"]))
-        choco = make_plan(example("docker-choco"))
-        self.assertEqual(2, len(choco["groups"]))
-        self.assertEqual(["b000", "b002"], choco["groups"][0]["builds"])
+        families = make_plan(example("windows-families"))
+        self.assertEqual(2, len(families["groups"]))
+        self.assertEqual(["b000", "b002"], families["groups"][0]["builds"])
         self.assertNotEqual(
-            choco["builds"][0]["buildArgs"]["BASE_IMAGE"],
-            choco["builds"][2]["buildArgs"]["BASE_IMAGE"],
+            families["builds"][0]["buildArgs"]["BASE_IMAGE"],
+            families["builds"][2]["buildArgs"]["BASE_IMAGE"],
         )
 
     def test_same_target_rejects_inconsistent_runner_or_timeout(self):
         for override in ({"runner": "windows-2022"}, {"timeoutMinutes": 60}):
-            config = example("docker-choco")
+            config = example("windows-families")
             config["variants"][1]["targets"][0].update(override)
             with (
                 self.subTest(override=override),
@@ -203,11 +190,11 @@ class ConfigurationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / ".env"
             path.write_text(
-                "# comment\nexport DOCKER_NAMESPACE=faulo\nDOCKER_IMAGE='choco' # comment\nVALUE=literal # comment\nCOMMAND=$(touch /tmp/unwanted)\n",
+                "# comment\nexport DOCKER_NAMESPACE=example\nDOCKER_IMAGE='app' # comment\nVALUE=literal # comment\nCOMMAND=$(touch /tmp/unwanted)\n",
                 encoding="utf-8",
             )
             values = read_env(path)
-            self.assertEqual("choco", values["DOCKER_IMAGE"])
+            self.assertEqual("app", values["DOCKER_IMAGE"])
             self.assertEqual("literal", values["VALUE"])
             self.assertEqual("$(touch /tmp/unwanted)", values["COMMAND"])
             path.write_text(
@@ -221,7 +208,7 @@ class ConfigurationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "settings.env").write_text(
-                "DOCKER_NAMESPACE=file\nDOCKER_IMAGE=choco\n"
+                "DOCKER_NAMESPACE=file\nDOCKER_IMAGE=app\n"
             )
             config = {
                 "envFile": "settings.env",
@@ -230,7 +217,7 @@ class ConfigurationTests(unittest.TestCase):
             }
             resolved = resolve_config(config, root, {"DOCKER_NAMESPACE": "process"})
             self.assertEqual("process", resolved["namespace"])
-            self.assertEqual("choco", resolved["image"])
+            self.assertEqual("app", resolved["image"])
             with self.assertRaisesRegex(ValueError, "does not exist"):
                 resolve_config({"envFile": "missing.env"}, root, {})
 
@@ -243,7 +230,7 @@ class ConfigurationTests(unittest.TestCase):
                     read_env(path)
 
     def test_custom_runner_is_not_interpreted(self):
-        config = example("docker-unreal")
+        config = example("windows-only")
         config["targets"][0]["runner"] = "arbitrary-build-host"
         self.assertEqual(
             "arbitrary-build-host", make_plan(config)["builds"][0]["runner"]
