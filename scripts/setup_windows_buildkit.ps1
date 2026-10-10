@@ -74,7 +74,7 @@ root = "$buildkitRoot"
   networkMode = "cni"
   cniConfigPath = "$tomlCniConfig"
   cniBinaryPath = "$tomlCniDirectory"
-  max-parallelism = 2
+  max-parallelism = 1
 "@ | Set-Content -LiteralPath $buildkitConfig -Encoding utf8
 
 for ($attempt = 1; $attempt -le 30; $attempt++) {

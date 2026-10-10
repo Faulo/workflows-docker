@@ -125,8 +125,7 @@ jobs:
           runpy.run_path('workflow/scripts/detect_platform.py', run_name='__main__')
       - name: Set up Windows BuildKit
         if: runner.os == 'Windows' && inputs.windows-builder == 'buildkit'
-        shell: pwsh
-        run: ./workflow/scripts/setup_windows_buildkit.ps1
+        uses: ./workflow/.github/actions/windows-buildkit
       - name: Set up Buildx
         if: runner.os == 'Linux'
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
@@ -156,14 +155,14 @@ jobs:
           import os, subprocess
           subprocess.run(['python', 'workflow/scripts/build_group.py', 'prepare', '--plan', 'plan/plan.json', '--group', os.environ['GROUP_ID'], '--platform', os.environ['BUILD_PLATFORM'], '--publish', os.environ['PUBLISH']], check=True)
       - name: Build variants with shared BuildKit cache
-        if: runner.os == 'Linux' || inputs.windows-builder == 'buildkit'
+        if: runner.os == 'Linux'
         id: bake
         uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7
         with:
           files: bake/docker-bake.json
           source: .
       - name: Record variant results
-        if: runner.os == 'Linux' || inputs.windows-builder == 'buildkit'
+        if: runner.os == 'Linux'
         shell: python
         env:
           BAKE_METADATA: ${{ steps.bake.outputs.metadata }}
@@ -174,6 +173,14 @@ jobs:
           import os, pathlib, subprocess
           pathlib.Path('bake/metadata.json').write_text(os.environ['BAKE_METADATA'], encoding='utf-8')
           subprocess.run(['python', 'workflow/scripts/build_group.py', 'record', '--plan', 'plan/plan.json', '--group', os.environ['GROUP_ID'], '--platform', os.environ['BUILD_PLATFORM'], '--publish', os.environ['PUBLISH'], '--directory', os.environ['RECORD_DIRECTORY']], check=True)
+      - name: Build Windows variants with shared BuildKit cache
+        if: runner.os == 'Windows' && inputs.windows-builder == 'buildkit'
+        uses: ./workflow/.github/actions/windows-bake
+        with:
+          group: ${{ matrix.id }}
+          platform: ${{ steps.platform.outputs.platform }}
+          publish: ${{ inputs.publish }}
+          directory: ${{ env.RECORD_DIRECTORY }}
       - name: Build Windows variants with shared local cache
         if: runner.os == 'Windows' && inputs.windows-builder == 'classic'
         working-directory: source
@@ -202,17 +209,6 @@ jobs:
           path: ${{ runner.temp }}/docker-v2-buildkit/*.log
           if-no-files-found: ignore
           retention-days: 7
-      - name: Stop isolated Windows builder services
-        if: always() && runner.os == 'Windows' && inputs.windows-builder == 'buildkit'
-        shell: pwsh
-        run: |
-          foreach ($serviceName in 'docker-v2-buildkitd', 'docker-v2-containerd') {
-            if (Get-Service $serviceName -ErrorAction SilentlyContinue) {
-              Stop-Service $serviceName -ErrorAction Stop
-              sc.exe delete $serviceName
-              if ($LASTEXITCODE -ne 0) { throw "Cannot remove $serviceName" }
-            }
-          }
 
   publication:
     needs: [configuration, build]

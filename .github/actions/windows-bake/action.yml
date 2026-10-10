@@ -1,0 +1,18 @@
+name: Windows Bake variants
+description: Build variants sequentially on one WCOW builder with shared cache
+inputs:
+  group:
+    required: true
+    description: Target group ID
+  platform:
+    required: true
+    description: Detected native platform
+  publish:
+    required: true
+    description: Whether to publish images
+  directory:
+    required: true
+    description: Build records directory
+runs:
+  using: node24
+  main: main.js

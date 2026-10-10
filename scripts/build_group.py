@@ -178,9 +178,55 @@ def classic(plan, group_id, platform, directory, publish=True):
     require(not failed, f"Required builds failed: {', '.join(failed)}")
 
 
+def windows_bake(plan, group_id, platform, directory, publish=True, output="bake"):
+    group, builds = group_builds(plan, group_id)
+    failed = []
+    for build in builds:
+        print(f"::group::{build['target']} × {build['variant']}", flush=True)
+        metadata_path = Path(output) / f"{build['id']}-metadata.json"
+        try:
+            subprocess.run(
+                [
+                    "docker",
+                    "--context",
+                    "default",
+                    "buildx",
+                    "bake",
+                    "--file",
+                    str(Path(output) / "docker-bake.json"),
+                    "--progress",
+                    "plain",
+                    "--metadata-file",
+                    str(metadata_path),
+                    build["id"],
+                ],
+                check=True,
+            )
+            single_plan = {**plan, "groups": [{**group, "builds": [build["id"]]}]}
+            record_results(
+                single_plan,
+                group_id,
+                platform,
+                json.loads(metadata_path.read_text(encoding="utf-8")),
+                directory,
+                publish,
+                output,
+            )
+        except (subprocess.CalledProcessError, ValueError) as error:
+            failed.append(build["id"])
+            print(
+                f"::error::{build['target']} × {build['variant']}: {error}", flush=True
+            )
+        finally:
+            print("::endgroup::", flush=True)
+    require(not failed, f"Required builds failed: {', '.join(failed)}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["prepare", "record", "classic"])
+    parser.add_argument(
+        "command", choices=["prepare", "record", "classic", "windows-bake"]
+    )
     parser.add_argument("--plan", required=True)
     parser.add_argument("--group", required=True)
     parser.add_argument("--platform", required=True)
@@ -212,8 +258,12 @@ def main():
             publish,
             args.output,
         )
-    else:
+    elif args.command == "classic":
         classic(plan, args.group, args.platform, args.directory, publish)
+    else:
+        windows_bake(
+            plan, args.group, args.platform, args.directory, publish, args.output
+        )
 
 
 if __name__ == "__main__":
