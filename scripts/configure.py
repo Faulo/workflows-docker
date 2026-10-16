@@ -191,7 +191,7 @@ def make_plan(config, root=None, environment=None):
         require(
             isinstance(name, str)
             and TAG.fullmatch(name)
-            and not name.startswith(("wf-v3-", "wf-v4-")),
+            and not name.startswith("wf-v3-"),
             f"Invalid or reserved public tag: {name}",
         )
         require(name not in tags, f"Duplicate public tag: {name}")

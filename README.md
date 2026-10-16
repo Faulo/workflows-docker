@@ -11,7 +11,7 @@ multiple Windows LTSC releases. Builds can also run without publication or
 registry credentials. Image preparation and compilation belong in Dockerfile
 stages; application tests run separately from this workflow.
 
-Use `v4` for compatible updates, or a version tag / full commit SHA for an immutable
+Use `v3` for compatible updates, or a version tag / full commit SHA for an immutable
 reference. The existing `publish.yml` interface remains available for v1 consumers;
 its documentation is in [docs/v1.md](docs/v1.md).
 
@@ -40,7 +40,7 @@ concurrency:
 
 jobs:
   docker:
-    uses: Faulo/workflows-docker/.github/workflows/docker.yml@v4
+    uses: Faulo/workflows-docker/.github/workflows/docker.yml@v3
     with:
       config: docker.json
     secrets:
@@ -65,10 +65,10 @@ the login username, including organization namespaces.
 
 ## Configuration
 
-Workflow v4 introduces recursive matrices with configuration `schemaVersion: 3`.
+Workflow v3 supports recursive matrices with configuration `schemaVersion: 3`.
 The [JSON Schema](docker.schema.json) describes both this format and the legacy
 schema version `2`, which remains accepted for existing configurations. The
-previous variants/targets interface is documented in [docs/v3.md](docs/v3.md).
+previous variants/targets interface is documented in [docs/schema-v2.md](docs/schema-v2.md).
 
 ```json
 {
@@ -144,7 +144,7 @@ alias names the published tag.
 
 Every generated public name must be a valid Docker tag of at most 128 characters.
 Duplicate names, ambiguous concatenations, duplicate JSON keys, empty matrices or
-tag maps, and reserved `wf-v3-` / `wf-v4-` names fail before builds start. Expansion
+tag maps, and reserved `wf-v3-` names fail before builds start. Expansion
 is limited to 256 target jobs, 4096 builds, 4096 alias combinations per prefix,
 16384 publications, and the workflow's 400 KB plan budget.
 
@@ -204,9 +204,9 @@ families beneath one prefix cannot be repaired by adding more axes. Before any
 public tag moves, publication rejects duplicate OS/architecture/Windows build
 prefix combinations and preserves each image's Windows OS-version metadata.
 
-### Migration from v3
+### Adopting schema version 3
 
-Change the workflow reference to `@v4`. Existing schema version `2` configurations
+Keep the workflow reference at `@v3`. Existing schema version `2` configurations
 can continue unchanged. To adopt recursive matrices, set `schemaVersion` to `3`
 and replace `variants` / `targets` with labeled axes and their `tags` maps. Move
 variant aliases onto the corresponding first-axis choice, shared configuration
@@ -216,8 +216,7 @@ onto the root or axes, and target overrides onto their leaf choices. Use
 The new format publishes every intermediate prefix automatically. Review generated
 names when migrating: for example, splitting `windows-ltsc2019` into OS and release
 axes adds `latest-windows` alongside `latest-windows-ltsc2019`. Historical public
-tags are retained, including when a matrix branch is removed. Published v3 tags
-retain their previous implementation and interface.
+tags are retained, including when a matrix branch is removed. Versioned workflow tags retain their published implementation.
 
 ## Publication behavior
 
@@ -254,7 +253,7 @@ then verifies each public tag against the expected image digests and platforms.
 Aliases must reference the same final index digest as their product tag. A
 publication summary lists the resulting tags, index digests, and image platforms.
 
-Windows staging tags begin with reserved `wf-v4-` names and are deleted after
+Windows staging tags begin with reserved `wf-v3-` names and are deleted after
 publication or a build failure, including earlier attempts of the same run. Because
 runner labels are opaque, cleanup checks reserved staging names for all targets;
 Linux names return 404. A cleanup failure is reported as a workflow failure.
@@ -299,7 +298,7 @@ publisher tests.
 
 Dependabot checks GitHub Actions dependencies weekly and groups available updates
 into one pull request. Action references remain pinned to commit SHAs. Updates to
-the v4 workflow and its validation workflow are checked by the unpublished
+the v3 workflow and its validation workflow are checked by the unpublished
 example builds.
 
 The implementation uses Python's standard library on runners. Run its focused

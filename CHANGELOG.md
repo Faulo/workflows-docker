@@ -9,20 +9,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
-- Workflow v4 with recursive, labeled matrix maps using configuration schema
-  version `3`. Axis defaults, tag overrides, Cartesian expansion, nested axes,
+- Recursive, labeled matrix maps using configuration schema
+  version `3` in workflow v3. Axis defaults, tag overrides, Cartesian expansion, nested axes,
   and `{{matrix.label}}` substitution produce builds from complete paths.
 - Automatic intermediate prefix indices and propagated aliases, assembled from
   immutable leaf digests with attestations and Windows metadata preserved.
 - Validation for repeated axes, unknown matrix references, duplicate JSON keys,
   expanded tag collisions, and expansion limits before builds begin.
 - Matrix example builds and migration documentation. Schema version `2` remains
-  accepted for existing configurations; v3 documentation is archived.
-
-### Changed
-
-- Move workflow artifact names, staging tags, concurrency groups, and cache scopes
-  to the v4 namespace. Existing v3 tags keep their previous implementation.
+  accepted for existing configurations, with its interface documented separately.
 
 ## [3.0.2] - 2026-10-10
 

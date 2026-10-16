@@ -26,7 +26,7 @@ def bake_definition(
         platform in ("linux/amd64", "linux/arm64"),
         "Bake builds require a native Linux runner",
     )
-    scopes = [f"v4-{build['variant']}-{build['target']}" for build in builds]
+    scopes = [f"v3-{build['variant']}-{build['target']}" for build in builds]
     targets = {}
     for build, scope in zip(builds, scopes):
         targets[build["id"]] = {

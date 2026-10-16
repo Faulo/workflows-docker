@@ -130,7 +130,7 @@ class MatrixTests(unittest.TestCase):
             lambda c: c["matrix"]["version"]["tags"]["1.0"].update(aliases="a"),
             lambda c: c["matrix"]["version"]["tags"]["1.0"].update(aliases=[{}]),
             lambda c: c["matrix"]["version"]["tags"]["1.0"].update(aliases=["1.0"]),
-            lambda c: c["matrix"]["version"]["tags"].update({"wf-v4-private": {}}),
+            lambda c: c["matrix"]["version"]["tags"].update({"wf-v3-private": {}}),
             lambda c: c["matrix"]["version"]["tags"].update({"bad tag": {}}),
             lambda c: c.update(buildArgs={"X": "{{matrix.unknown}}"}),
             lambda c: c.update(buildArgs={"X": "{{other.version}}"}),
@@ -280,7 +280,7 @@ class MatrixTests(unittest.TestCase):
                 self.assertEqual(primary, published["example/app:" + tag])
         self.assertTrue(
             all(
-                tag.startswith("wf-v4-123-1-") for tag in staging_tags(plan, "123", "1")
+                tag.startswith("wf-v3-123-1-") for tag in staging_tags(plan, "123", "1")
             )
         )
 

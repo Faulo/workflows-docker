@@ -1,4 +1,5 @@
-> Archived workflow v3 documentation. For workflow v4, see the [current README](../README.md).
+> Configuration schema version 2 reference for workflow v3. For recursive matrices
+> using schema version 3, see the [current README](../README.md).
 
 # Docker building and publishing workflow
 

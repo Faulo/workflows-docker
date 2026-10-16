@@ -153,7 +153,7 @@ def make_matrix_plan(config, root=None):
             ]
             for tag in tags:
                 require(
-                    TAG.fullmatch(tag) and not tag.startswith(("wf-v3-", "wf-v4-")),
+                    TAG.fullmatch(tag) and not tag.startswith("wf-v3-"),
                     f"Invalid or reserved public tag: {tag}",
                 )
                 require(tag not in public_tags, f"Duplicate public tag: {tag}")

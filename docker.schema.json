@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Docker publishing configuration v4",
+  "title": "Docker publishing configuration v3",
   "oneOf": [
     {
       "type": "object",
@@ -151,7 +151,7 @@
       "minLength": 1,
       "pattern": "^[^\\r\\n\\u0000]+$",
       "maxLength": 128,
-      "description": "Public Docker tag after environment substitution; wf-v3- and wf-v4- prefixes are reserved"
+      "description": "Public Docker tag after environment substitution; wf-v3- prefix is reserved"
     },
     "path": {
       "type": "string",
