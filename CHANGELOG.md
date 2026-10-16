@@ -7,10 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-10-16
+
 ### Added
 
-- Recursive, labeled matrix maps using configuration schema
-  version `3` in workflow v3. Axis defaults, tag overrides, Cartesian expansion, nested axes,
+- Recursive, labeled matrix maps using configuration schema version `3` in
+  workflow v3. Axis defaults, tag overrides, Cartesian expansion, nested axes,
   and `{{matrix.label}}` substitution produce builds from complete paths.
 - Automatic intermediate prefix indices and propagated aliases, assembled from
   immutable leaf digests with attestations and Windows metadata preserved.
@@ -219,7 +221,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   verification after both builds succeed.
 - Serialized publication and usage documentation.
 
-[Unreleased]: https://github.com/Faulo/workflows-docker/compare/v3.0.2...HEAD
+[Unreleased]: https://github.com/Faulo/workflows-docker/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/Faulo/workflows-docker/compare/v3.0.2...v3.1.0
 [3.0.2]: https://github.com/Faulo/workflows-docker/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/Faulo/workflows-docker/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/Faulo/workflows-docker/compare/v2.1.0...v3.0.0
