@@ -23,7 +23,7 @@ def staging_tag(build_id, run_id, attempt):
         str(run_id).isdigit() and str(attempt).isdigit(),
         "Invalid workflow run identity",
     )
-    return f"wf-v3-{run_id}-{attempt}-{build_id}"
+    return f"wf-v4-{run_id}-{attempt}-{build_id}"
 
 
 def build_command(entry, target_image, cache_image=None):

@@ -37,15 +37,26 @@ def verify(plan, records):
             for build in plan["builds"]
         }
     )
+    expected_publications.update(
+        {
+            f"{variant}-{os_name}": {
+                build["id"]
+                for build in plan["builds"]
+                if build["variant"] == variant and build["matrix"]["os"] == os_name
+            }
+            for variant in ("1.0", "2.0")
+            for os_name in ("linux", "windows")
+        }
+    )
     actual_publications = {
         tag: set(publication["builds"])
         for publication in plan["publications"]
         for tag in publication["tags"]
     }
     require(
-        len(plan["publications"]) == 10
+        len(plan["publications"]) == 14
         and actual_publications == expected_publications,
-        "Fixture must plan two combined tags and eight target-specific tags",
+        "Fixture must plan two combined tags, eight target-specific tags, and four OS tags",
     )
     for build in plan["builds"]:
         record = records[build["id"]]

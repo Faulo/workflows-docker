@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "namespace": "$DOCKER_NAMESPACE",
   "image": "$DOCKER_IMAGE",
   "envFile": "examples/test-image/.env",
@@ -7,58 +7,52 @@
   "buildArgs": {
     "SHARED_MESSAGE": "$FIXTURE_MESSAGE"
   },
-  "targets": [
-    {
-      "runner": "ubuntu-latest",
-      "dockerfile": "examples/test-image/linux/Dockerfile",
+  "timeoutMinutes": 30,
+  "matrix": {
+    "version": {
       "buildArgs": {
-        "TARGET_ID": "linux-amd64"
+        "VARIANT": "{{matrix.version}}"
       },
-      "timeoutMinutes": 30,
-      "tag": "linux-amd64"
-    },
-    {
-      "runner": "ubuntu-24.04-arm",
-      "dockerfile": "examples/test-image/linux/Dockerfile",
-      "buildArgs": {
-        "TARGET_ID": "linux-arm64"
-      },
-      "timeoutMinutes": 30,
-      "tag": "linux-arm64"
-    },
-    {
-      "runner": "windows-latest",
-      "dockerfile": "examples/test-image/windows/Dockerfile",
-      "buildArgs": {
-        "TARGET_ID": "windows-2019",
-        "BASE_IMAGE": "mcr.microsoft.com/windows/nanoserver:ltsc2019"
-      },
-      "timeoutMinutes": 30,
-      "tag": "windows-2019"
-    },
-    {
-      "runner": "windows-latest",
-      "dockerfile": "examples/test-image/windows/Dockerfile",
-      "buildArgs": {
-        "TARGET_ID": "windows-2022",
-        "BASE_IMAGE": "mcr.microsoft.com/windows/nanoserver:ltsc2022"
-      },
-      "timeoutMinutes": 30,
-      "tag": "windows-2022"
-    }
-  ],
-  "variants": [
-    {
-      "tag": "1.0",
-      "buildArgs": {
-        "VARIANT": "1.0"
+      "tags": {
+        "1.0": {},
+        "2.0": {}
       }
     },
-    {
-      "tag": "2.0",
+    "os": {
+      "dockerfile": "examples/test-image/{{matrix.os}}/Dockerfile",
       "buildArgs": {
-        "VARIANT": "2.0"
+        "TARGET_ID": "{{matrix.os}}-{{matrix.target}}"
+      },
+      "tags": {
+        "linux": {
+          "matrix": {
+            "target": {
+              "tags": {
+                "amd64": {
+                  "runner": "ubuntu-latest"
+                },
+                "arm64": {
+                  "runner": "ubuntu-24.04-arm"
+                }
+              }
+            }
+          }
+        },
+        "windows": {
+          "runner": "windows-latest",
+          "matrix": {
+            "target": {
+              "buildArgs": {
+                "BASE_IMAGE": "mcr.microsoft.com/windows/nanoserver:ltsc{{matrix.target}}"
+              },
+              "tags": {
+                "2019": {},
+                "2022": {}
+              }
+            }
+          }
+        }
       }
     }
-  ]
+  }
 }

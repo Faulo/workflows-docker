@@ -48,7 +48,10 @@ class FixtureTests(unittest.TestCase):
 
     def test_target_publication_cannot_include_another_os(self):
         plan = copy.deepcopy(self.plan)
-        plan["publications"][2]["builds"].append("b002")
+        publication = next(
+            item for item in plan["publications"] if "1.0-linux-amd64" in item["tags"]
+        )
+        publication["builds"].append("b002")
         with self.assertRaisesRegex(ValueError, "eight target-specific tags"):
             verify(plan, self.records)
 

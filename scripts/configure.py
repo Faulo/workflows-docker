@@ -145,6 +145,10 @@ def relative_path(value, description, root=None, directory=False):
 
 def make_plan(config, root=None, environment=None):
     config = resolve_config(config, root, environment)
+    if type(config.get("schemaVersion")) is int and config["schemaVersion"] == 3:
+        from matrix import make_matrix_plan
+
+        return make_matrix_plan(config, root)
     object_keys(
         config,
         {
@@ -161,7 +165,7 @@ def make_plan(config, root=None, environment=None):
     )
     require(
         type(config.get("schemaVersion")) is int and config["schemaVersion"] == 2,
-        "schemaVersion must be 2",
+        "schemaVersion must be 2 (legacy) or 3 (recursive matrix)",
     )
     image = config.get("image")
     namespace = config.get("namespace")
@@ -187,7 +191,7 @@ def make_plan(config, root=None, environment=None):
         require(
             isinstance(name, str)
             and TAG.fullmatch(name)
-            and not name.startswith("wf-v3-"),
+            and not name.startswith(("wf-v3-", "wf-v4-")),
             f"Invalid or reserved public tag: {name}",
         )
         require(name not in tags, f"Duplicate public tag: {name}")
@@ -314,6 +318,14 @@ def write_json(path, value):
     path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
 
 
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        require(key not in result, f"Duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
@@ -321,7 +333,13 @@ def main():
     args = parser.parse_args()
     root = Path.cwd()
     relative_path(args.config, "config", root)
-    plan = make_plan(json.loads((root / args.config).read_text(encoding="utf-8")), root)
+    plan = make_plan(
+        json.loads(
+            (root / args.config).read_text(encoding="utf-8"),
+            object_pairs_hook=unique_object,
+        ),
+        root,
+    )
     write_json(args.output, plan)
     outputs = {
         "image": plan["reference"],

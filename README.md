@@ -11,7 +11,7 @@ multiple Windows LTSC releases. Builds can also run without publication or
 registry credentials. Image preparation and compilation belong in Dockerfile
 stages; application tests run separately from this workflow.
 
-Use `v3` for compatible updates, or a version tag / full commit SHA for an immutable
+Use `v4` for compatible updates, or a version tag / full commit SHA for an immutable
 reference. The existing `publish.yml` interface remains available for v1 consumers;
 its documentation is in [docs/v1.md](docs/v1.md).
 
@@ -40,7 +40,7 @@ concurrency:
 
 jobs:
   docker:
-    uses: Faulo/workflows-docker/.github/workflows/docker.yml@v3
+    uses: Faulo/workflows-docker/.github/workflows/docker.yml@v4
     with:
       config: docker.json
     secrets:
@@ -65,138 +65,159 @@ the login username, including organization namespaces.
 
 ## Configuration
 
-The [JSON Schema](docker.schema.json) describes the configuration. Configuration
-schema version `2` is required by workflow major version `3`.
+Workflow v4 introduces recursive matrices with configuration `schemaVersion: 3`.
+The [JSON Schema](docker.schema.json) describes both this format and the legacy
+schema version `2`, which remains accepted for existing configurations. The
+previous variants/targets interface is documented in [docs/v3.md](docs/v3.md).
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "namespace": "$DOCKER_NAMESPACE",
   "image": "$DOCKER_IMAGE",
   "context": ".",
-  "targets": [
-    {
-      "tag": "linux-amd64",
-      "dockerfile": "linux/Dockerfile",
-      "runner": "ubuntu-latest"
+  "matrix": {
+    "version": {
+      "buildArgs": {"APP_VERSION": "{{matrix.version}}"},
+      "tags": {
+        "1.0": {},
+        "2.0": {"aliases": ["latest"]}
+      }
     },
-    {
-      "tag": "windows-2019",
-      "dockerfile": "windows/Dockerfile",
-      "runner": "windows-latest",
-      "buildArgs": {"OS_BASE": "ltsc2019"}
+    "os": {
+      "dockerfile": "{{matrix.os}}/Dockerfile",
+      "runner": "{{matrix.os}}-latest",
+      "tags": {
+        "linux": {
+          "matrix": {
+            "architecture": {
+              "tags": {
+                "amd64": {"runner": "ubuntu-latest"},
+                "arm64": {"runner": "ubuntu-24.04-arm"}
+              }
+            }
+          }
+        },
+        "windows": {
+          "matrix": {
+            "release": {
+              "buildArgs": {"OS_BASE": "{{matrix.release}}"},
+              "tags": {"ltsc2019": {}, "ltsc2022": {}}
+            }
+          }
+        }
+      }
     }
-  ],
-  "variants": [{"tag": "latest"}]
+  }
 }
 ```
 
-For the variable-based configuration above, add a `.env` file:
+For variable-based names, add a caller-relative `.env`:
 
 ```dotenv
 DOCKER_NAMESPACE=your-dockerhub-namespace
 DOCKER_IMAGE=your-image
 ```
 
-Alternatively, use literal namespace and image names in the JSON configuration.
+### Recursive expansion and public tags
+
+`matrix` is a nonempty map of labeled axes. Map declaration order defines axis
+order and therefore tag order; tools editing this JSON must preserve that order.
+Each axis contains a nonempty `tags` map whose keys are tag segments. Axis labels
+such as `version` and `os` appear in matrix variables and build metadata, and do
+not contribute to tags. Labels must be identifiers and cannot repeat on one path.
+
+Axes multiply in order. A choice can contain another `matrix`, which expands
+immediately after that choice, before subsequent outer axes. This example builds
+2 versions times 4 targets: eight images in four shared target jobs.
+
+Complete paths build images. Every prefix publishes an index containing exactly
+its descendant images and their associated attestations. The example produces
+`2.0`, `2.0-linux`, `2.0-linux-amd64`, `2.0-linux-arm64`, `2.0-windows`,
+`2.0-windows-ltsc2019`, and `2.0-windows-ltsc2022`, as well as the corresponding
+`latest` aliases. Intermediate indices and aliases add no builds.
+
+A choice's optional `aliases` list supplies alternative segments. Parent and child
+aliases multiply, and every alias for a prefix references that prefix's index
+digest. Matrix variables always contain the selected primary key, even when an
+alias names the published tag.
+
+Every generated public name must be a valid Docker tag of at most 128 characters.
+Duplicate names, ambiguous concatenations, duplicate JSON keys, empty matrices or
+tag maps, and reserved `wf-v3-` / `wf-v4-` names fail before builds start. Expansion
+is limited to 256 target jobs, 4096 builds, 4096 alias combinations per prefix,
+16384 publications, and the workflow's 400 KB plan budget.
+
+### Inheritance and substitution
+
+Build configuration can be set at the root, on an axis, or on a tag choice:
 
 | Field | Meaning |
 | --- | --- |
-| `namespace` | Docker Hub publication namespace; usually `$DOCKER_NAMESPACE` |
-| `image` | Repository name without its namespace; usually `$DOCKER_IMAGE` |
-| `envFile` | Optional caller-relative dotenv path; defaults to `.env` when present |
-| `context` | Default build context, relative to the consumer root; defaults to `.` |
-| `buildArgs` | Optional build arguments shared by all product variants |
-| `targets` | Default targets for variants that do not define their own |
-| `variants` | Product variants, each with a required public `tag` |
-| Variant `aliases` | Additional public tags pointing to the same final index |
-| Variant `buildArgs` | Overrides for the shared build arguments |
-| Variant `targets` | Replaces the default targets for this product variant |
+| `context` | Consumer-relative build context; defaults to `.` |
+| `dockerfile` | Consumer-relative Dockerfile; required on each completed path |
+| `runner` | Runner string or label array; required on each completed path |
+| `buildArgs` | Build arguments; merged by key down the path |
+| `timeoutMinutes` | Entire target job timeout, 180 by default; from 1 to 360 |
 
-| Target field | Meaning |
-| --- | --- |
-| `tag` | Unique Docker tag suffix within the variant; publishes `<variant>-<target>` |
-| `dockerfile` | Required Dockerfile path relative to the consumer root |
-| `context` | Optional override of the default build context |
-| `buildArgs` | Final overrides of global and product build arguments |
-| `runner` | Required runner string or label array; passed unchanged into `runs-on` |
-| `timeoutMinutes` | Entire target job timeout, 180 by default; between 1 and 360 |
+The root additionally requires `namespace`, `image`, and `schemaVersion`. Optional
+`envFile` selects a caller-relative dotenv file; otherwise `.env` is read when
+present. Namespace and image can instead be literal lowercase Docker Hub names.
 
-JSON string values support `$NAME` and `${NAME}` substitution. The configuration
-job reads the consumer's `.env` when present; `envFile` can select another file.
-An explicit `envFile` must exist. Process environment values override dotenv
-values. Missing variables fail configuration validation. Substitution happens
-once after JSON parsing, so quotes/backslashes in values cannot break JSON.
-Use `$$` for a literal dollar sign. Dotenv values are literal: shell commands and
-references inside them are never executed or recursively expanded. Quoted values,
-escaped quotes, `export` assignments, and comments are supported; multiline
-assignments are not supported. The schema checks raw structure; resolved names
-and semantic constraints are checked by the planner.
+Configuration inherits along each path. At each step, axis settings override
+inherited settings, then choice settings override axis settings. Deeper values
+win; `buildArgs` merge by key. Unknown properties and malformed build arguments
+are rejected, including on intermediate nodes.
 
-Targets do not declare their OS, architecture, Windows release, or isolation.
-Runner labels are not interpreted or rewritten. At runtime, the workflow checks
-the runner OS/architecture against the Docker daemon and builds natively for
-Linux amd64/arm64 or Windows amd64. Image metadata supplies the Windows OS version.
-Build arguments and Dockerfiles select the image's LTSC release.
+`{{matrix.axisLabel}}` substitutes the selected primary key. Templates resolve
+once, after the completed path's configuration has been merged. This permits an
+earlier field to reference a later axis, and a leaf to override an earlier runner
+or path before validation. Missing matrix references and malformed expressions
+in the final configuration fail before builds. Templates apply to string values,
+including runner label arrays and build arguments; keys and aliases are literal.
 
-GitHub-hosted runner examples are `ubuntu-latest` for Linux amd64,
-`ubuntu-24.04-arm` for Linux arm64, and `windows-latest` for Windows amd64.
-Custom runner strings or label arrays work unchanged and require Python plus a
-working native Docker daemon. Linux runners must support Buildx and GitHub Actions
-cache access. Windows runners need Hyper-V isolation support. All Windows builds
-use `--isolation=hyperv`, allowing LTSC 2019 and 2022 images on a compatible newer
-host; the workflow does not choose a host based on the container release.
+Existing `$NAME` and `${NAME}` environment substitution still runs first on JSON
+string values. Process environment values override dotenv assignments. Missing
+variables fail; `$$` escapes a literal dollar. Dotenv assignments remain literal:
+commands and references inside them are never executed or recursively expanded.
+Explicit `envFile` paths must exist. Dotenv supports quotes, escaped quotes,
+`export`, and comments, but not multiline assignments.
 
-One matrix covers all targets, including Windows-only and Linux-only projects.
-Each target gets one job containing all its product variants, with at most 256
-target jobs and four concurrent jobs. Repeated target tags across variants must
-use the same runner and timeout; their Dockerfiles, contexts, and build arguments
-can differ. Linux Dockerfiles must support the runner's native architecture;
-choosing an arm64 runner does not make an x64 application portable.
+### Native builds and compatibility
 
-Build argument precedence is global, then variant, then target. Values are
-single-line strings, numbers, or booleans. Credentials belong in secrets, not
-build arguments. Unknown properties, invalid tags, duplicate public tags,
-duplicate target tags, and missing contexts/Dockerfiles fail before builds start.
-The schema handles structural validation; the planner also checks semantic
-constraints and the filesystem.
+Targets do not declare OS, architecture, Windows release, or isolation. Runner
+labels pass unchanged into `runs-on`. Runtime detection verifies the runner
+against its native Docker daemon. Supported platforms are Linux amd64/arm64 and
+Windows amd64. Windows builds use Hyper-V isolation; Dockerfiles and build
+arguments choose the image release. Custom runners require Python and Docker;
+Linux additionally requires Buildx and GitHub Actions cache access.
 
-## Product variants and Windows releases
+Internally, the first selected segment identifies the product variant. Remaining
+segments identify the target; with only one axis, its segment also identifies
+the target. Variants sharing a target run together and must use the same runner
+and timeout. Dockerfiles, contexts, and arguments can differ between variants.
+Build metadata records each leaf's selected matrix values.
 
-Product variants select the image's contents. Platforms select architecture and
-operating system compatibility underneath a product tag.
+Full Windows and Server Core families must remain under separate top-level
+choices. Every prefix combines all its descendants, so placing ambiguous Windows
+families beneath one prefix cannot be repaired by adding more axes. Before any
+public tag moves, publication rejects duplicate OS/architecture/Windows build
+prefix combinations and preserves each image's Windows OS-version metadata.
 
-For example, application releases can use tags `1.0` and `2.0`, with `latest`
-as an alias for `2.0`. Each variant can build the same set of Linux and Windows
-targets. A Windows-only image can instead use `windows` and `windowsservercore`
-as separate variants, each with LTSC 2019 and 2022 targets. Assign `latest` to the
-variant you want users to receive by default.
+### Migration from v3
 
-Different Windows base families must not share one product tag. A manifest cannot
-reliably choose full Windows versus Server Core when both match the same platform
-and OS release. After builds complete, targets with the same platform and Windows
-OS build prefix within one product variant are rejected before any public tag moves.
+Change the workflow reference to `@v4`. Existing schema version `2` configurations
+can continue unchanged. To adopt recursive matrices, set `schemaVersion` to `3`
+and replace `variants` / `targets` with labeled axes and their `tags` maps. Move
+variant aliases onto the corresponding first-axis choice, shared configuration
+onto the root or axes, and target overrides onto their leaf choices. Use
+`{{matrix.label}}` instead of repeating selected values in build arguments.
 
-Each variant publishes a combined image index under its declared tag and aliases.
-Every target also publishes an index containing only that target's image and
-attestations, tagged `<variant.tag>-<target.tag>`. Aliases receive the same suffix:
-with variant `2.0`, alias `latest`, and target `ltsc2019`, publication creates
-`2.0`, `latest`, `2.0-ltsc2019`, and `latest-ltsc2019`.
-
-Use a target-specific tag to select a particular OS release or architecture even
-when the host can run several targets. Combined tags use the runtime's platform
-matching. Generated tags must be valid Docker tags of at most 128 characters,
-and must not collide with any declared tag, alias, or other generated tag.
-
-### Migration from v2
-
-Change the caller's workflow reference to `@v3`, set `schemaVersion` to `2`, and
-rename every target's `id` property to `tag`. The `id` configuration property is
-rejected, including when `tag` is also present. Choose suffixes suitable for your
-public image tags: for example, `ltsc2019` produces `2.0-ltsc2019`.
-
-Published v2 tags retain their previous interface. The current implementation
-accepts only the v3 configuration contract.
+The new format publishes every intermediate prefix automatically. Review generated
+names when migrating: for example, splitting `windows-ltsc2019` into OS and release
+axes adds `latest-windows` alongside `latest-windows-ltsc2019`. Historical public
+tags are retained, including when a matrix branch is removed. Published v3 tags
+retain their previous implementation and interface.
 
 ## Publication behavior
 
@@ -233,7 +254,7 @@ then verifies each public tag against the expected image digests and platforms.
 Aliases must reference the same final index digest as their product tag. A
 publication summary lists the resulting tags, index digests, and image platforms.
 
-Windows staging tags begin with reserved `wf-v3-` names and are deleted after
+Windows staging tags begin with reserved `wf-v4-` names and are deleted after
 publication or a build failure, including earlier attempts of the same run. Because
 runner labels are opaque, cleanup checks reserved staging names for all targets;
 Linux names return 404. A cleanup failure is reported as a workflow failure.
@@ -261,8 +282,8 @@ supported by this implementation.
 amd64, Linux arm64, Windows LTSC 2019, and Windows LTSC 2022: eight images in four
 target jobs. Linux uses Alpine; Windows uses NanoServer on `windows-latest`.
 The fixture exercises an explicit configuration path, dotenv substitution,
-global/variant/target build arguments, native architectures, shared stages, and
-Windows release selection.
+inherited build arguments, native architectures, shared stages, Windows release
+selection, recursive axes, matrix substitution, and intermediate OS tags.
 
 The **Test image** workflow runs on pull requests and pushes to `main` that change
 its tracked workflows, scripts, or fixture paths, and supports manual dispatch.
@@ -278,7 +299,7 @@ publisher tests.
 
 Dependabot checks GitHub Actions dependencies weekly and groups available updates
 into one pull request. Action references remain pinned to commit SHAs. Updates to
-the v3 workflow and its validation workflow are checked by the unpublished
+the v4 workflow and its validation workflow are checked by the unpublished
 example builds.
 
 The implementation uses Python's standard library on runners. Run its focused

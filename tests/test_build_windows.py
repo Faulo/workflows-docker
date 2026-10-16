@@ -68,7 +68,7 @@ class WindowsBuildTests(unittest.TestCase):
                 "manifest",
                 "inspect",
                 "--verbose",
-                "example/app:wf-v3-123-1-b000",
+                "example/app:wf-v4-123-1-b000",
                 capture=True,
             )
             docker.assert_any_call(

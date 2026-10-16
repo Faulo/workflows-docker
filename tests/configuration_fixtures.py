@@ -1,6 +1,44 @@
 """Generic configurations for planner and builder tests."""
 
 
+def matrix_example():
+    return {
+        "schemaVersion": 3,
+        "namespace": "example",
+        "image": "app",
+        "matrix": {
+            "version": {
+                "buildArgs": {"APP_VERSION": "{{matrix.version}}"},
+                "tags": {"1.0": {}, "2.0": {"aliases": ["latest"]}},
+            },
+            "os": {
+                "dockerfile": "{{matrix.os}}/Dockerfile",
+                "runner": "{{matrix.os}}-latest",
+                "tags": {
+                    "linux": {
+                        "matrix": {
+                            "architecture": {
+                                "tags": {
+                                    "amd64": {"runner": "ubuntu-latest"},
+                                    "arm64": {"runner": "ubuntu-24.04-arm"},
+                                }
+                            }
+                        }
+                    },
+                    "windows": {
+                        "matrix": {
+                            "release": {
+                                "buildArgs": {"OS_BASE": "{{matrix.release}}"},
+                                "tags": {"ltsc2019": {}, "ltsc2022": {}},
+                            }
+                        }
+                    },
+                },
+            },
+        },
+    }
+
+
 def example(kind="multi-platform"):
     config = {
         "schemaVersion": 2,

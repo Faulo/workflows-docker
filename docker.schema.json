@@ -1,91 +1,146 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Docker publishing configuration v3",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "schemaVersion",
-    "namespace",
-    "image",
-    "variants"
-  ],
-  "properties": {
-    "schemaVersion": {
-      "const": 2
-    },
-    "image": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^[^\\r\\n\\u0000]+$",
-      "description": "Docker Hub repository name after environment substitution"
-    },
-    "context": {
-      "$ref": "#/$defs/path"
-    },
-    "buildArgs": {
-      "$ref": "#/$defs/arguments"
-    },
-    "targets": {
-      "$ref": "#/$defs/targets"
-    },
-    "variants": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "tag"
-        ],
-        "properties": {
-          "tag": {
-            "$ref": "#/$defs/tag"
-          },
-          "aliases": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": {
-              "$ref": "#/$defs/tag"
-            }
-          },
-          "buildArgs": {
-            "$ref": "#/$defs/arguments"
-          },
-          "targets": {
-            "$ref": "#/$defs/targets"
-          }
-        }
-      }
-    },
-    "namespace": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^[^\\r\\n\\u0000]+$",
-      "description": "Docker Hub namespace after environment substitution"
-    },
-    "envFile": {
-      "$ref": "#/$defs/path",
-      "description": "Caller-relative dotenv file; defaults to .env when present"
-    }
-  },
-  "allOf": [
+  "title": "Docker publishing configuration v4",
+  "oneOf": [
     {
-      "if": {
-        "not": {
-          "required": [
-            "targets"
-          ]
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "namespace",
+        "image",
+        "variants"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 2
+        },
+        "image": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\r\\n\\u0000]+$",
+          "description": "Docker Hub repository name after environment substitution"
+        },
+        "context": {
+          "$ref": "#/$defs/path"
+        },
+        "buildArgs": {
+          "$ref": "#/$defs/arguments"
+        },
+        "targets": {
+          "$ref": "#/$defs/targets"
+        },
+        "variants": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "tag"
+            ],
+            "properties": {
+              "tag": {
+                "$ref": "#/$defs/tag"
+              },
+              "aliases": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/tag"
+                }
+              },
+              "buildArgs": {
+                "$ref": "#/$defs/arguments"
+              },
+              "targets": {
+                "$ref": "#/$defs/targets"
+              }
+            }
+          }
+        },
+        "namespace": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\r\\n\\u0000]+$",
+          "description": "Docker Hub namespace after environment substitution"
+        },
+        "envFile": {
+          "$ref": "#/$defs/path",
+          "description": "Caller-relative dotenv file; defaults to .env when present"
         }
       },
-      "then": {
-        "properties": {
-          "variants": {
-            "items": {
+      "allOf": [
+        {
+          "if": {
+            "not": {
               "required": [
                 "targets"
               ]
             }
+          },
+          "then": {
+            "properties": {
+              "variants": {
+                "items": {
+                  "required": [
+                    "targets"
+                  ]
+                }
+              }
+            }
           }
+        }
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "namespace",
+        "image",
+        "matrix"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 3
+        },
+        "namespace": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\r\\n\\u0000]+$",
+          "description": "Docker Hub namespace after environment substitution"
+        },
+        "image": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\r\\n\\u0000]+$",
+          "description": "Docker Hub repository name after environment substitution"
+        },
+        "envFile": {
+          "$ref": "#/$defs/path",
+          "description": "Caller-relative dotenv file; defaults to .env when present"
+        },
+        "context": {
+          "$ref": "#/$defs/path"
+        },
+        "buildArgs": {
+          "$ref": "#/$defs/arguments"
+        },
+        "runner": {
+          "$ref": "#/$defs/runner"
+        },
+        "dockerfile": {
+          "$ref": "#/$defs/path"
+        },
+        "timeoutMinutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 360
+        },
+        "matrix": {
+          "$ref": "#/$defs/matrix"
         }
       }
     }
@@ -96,7 +151,7 @@
       "minLength": 1,
       "pattern": "^[^\\r\\n\\u0000]+$",
       "maxLength": 128,
-      "description": "Public Docker tag after environment substitution; wf-v3- prefix is reserved"
+      "description": "Public Docker tag after environment substitution; wf-v3- and wf-v4- prefixes are reserved"
     },
     "path": {
       "type": "string",
@@ -174,6 +229,86 @@
             "minimum": 1,
             "maximum": 360
           }
+        }
+      }
+    },
+    "matrix": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/axis"
+      },
+      "description": "Axes multiply in declaration order; labels do not contribute to tags"
+    },
+    "axis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tags"
+      ],
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/path"
+        },
+        "buildArgs": {
+          "$ref": "#/$defs/arguments"
+        },
+        "runner": {
+          "$ref": "#/$defs/runner"
+        },
+        "dockerfile": {
+          "$ref": "#/$defs/path"
+        },
+        "timeoutMinutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 360
+        },
+        "tags": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/choice"
+          }
+        }
+      }
+    },
+    "choice": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/path"
+        },
+        "buildArgs": {
+          "$ref": "#/$defs/arguments"
+        },
+        "runner": {
+          "$ref": "#/$defs/runner"
+        },
+        "dockerfile": {
+          "$ref": "#/$defs/path"
+        },
+        "timeoutMinutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 360
+        },
+        "aliases": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/tag"
+          }
+        },
+        "matrix": {
+          "$ref": "#/$defs/matrix"
         }
       }
     }

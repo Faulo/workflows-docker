@@ -336,10 +336,10 @@ class PublicationTests(unittest.TestCase):
         }
         self.assertEqual(
             [
-                "wf-v3-123-1-b000",
-                "wf-v3-123-2-b000",
-                "wf-v3-123-1-b001",
-                "wf-v3-123-2-b001",
+                "wf-v4-123-1-b000",
+                "wf-v4-123-2-b000",
+                "wf-v4-123-1-b001",
+                "wf-v4-123-2-b001",
             ],
             staging_tags(plan, "123", "2"),
         )

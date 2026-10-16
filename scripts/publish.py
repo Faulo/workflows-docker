@@ -163,7 +163,7 @@ def publish(plan, records, image, inspect=docker_json):
             ]
             require(
                 len(set(signatures)) == len(signatures),
-                "Ambiguous image platforms in one product variant; separate Windows base families into product variants",
+                "Ambiguous image platforms in one publication; separate Windows base families into top-level choices",
             )
             files = []
             for number, descriptor in enumerate(descriptors):
