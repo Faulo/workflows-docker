@@ -1,0 +1,924 @@
+{
+  "run": "https://github.com/Faulo/workflows-docker/actions/runs/39162365352",
+  "job": "https://github.com/Faulo/workflows-docker/actions/runs/39162365352/job/117778158654",
+  "commit": "cef6ea1a298978214036119dd542aba6ae446691",
+  "date": "2026-10-18",
+  "runnerImage": "windows-2025-vs2026",
+  "measurement": "Read-only file enumeration; GetCompressedFileSizeW; decimal GB = bytes / 1e9. No files deleted. Parent/child records overlap. File identities deduplicated within each target; linked paths skipped; WOF-compressed files included.",
+  "imageVersion": "20261007.264.1",
+  "volumes": {
+    "C:\\": {
+      "totalBytes": 160467759104,
+      "freeBytes": 30371639296
+    },
+    "D:\\": {
+      "totalBytes": 236205371392,
+      "freeBytes": 236097056768
+    }
+  },
+  "directories": [
+    {
+      "path": "C:\\Program Files\\Microsoft Visual Studio",
+      "logicalBytes": 33084863441,
+      "allocatedBytes": 33084863441,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 87770,
+      "skippedLinks": 4,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Microsoft Visual Studio",
+      "logicalBytes": 684194318,
+      "allocatedBytes": 684194318,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 3260,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Windows Kits",
+      "logicalBytes": 2622891982,
+      "allocatedBytes": 2622891982,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 11034,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Windows Kits",
+      "logicalBytes": 0,
+      "allocatedBytes": 0,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 0,
+      "skippedLinks": 0,
+      "errors": 0,
+      "missing": true
+    },
+    {
+      "path": "C:\\Program Files\\dotnet\\sdk",
+      "logicalBytes": 4533245753,
+      "allocatedBytes": 1840195650,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 40673,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\dotnet\\packs",
+      "logicalBytes": 6229543776,
+      "allocatedBytes": 2137278818,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 27904,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\dotnet\\sdk-manifests",
+      "logicalBytes": 499693,
+      "allocatedBytes": 268439,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 268,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\dotnet\\templates",
+      "logicalBytes": 72107231,
+      "allocatedBytes": 68554752,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 53,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Android",
+      "logicalBytes": 14722924777,
+      "allocatedBytes": 6032427919,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 266074,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\hostedtoolcache",
+      "logicalBytes": 5126554735,
+      "allocatedBytes": 5126554735,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 190741,
+      "skippedLinks": 5,
+      "errors": 0
+    },
+    {
+      "path": "C:\\ProgramData\\Package Cache",
+      "logicalBytes": 1749617467,
+      "allocatedBytes": 1749617467,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 383,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\ProgramData\\chocolatey",
+      "logicalBytes": 3061300441,
+      "allocatedBytes": 3061300441,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 31853,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\ProgramData\\docker",
+      "logicalBytes": 298939,
+      "allocatedBytes": 298939,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 13,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\vcpkg",
+      "logicalBytes": 157685916,
+      "allocatedBytes": 157685916,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 14362,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\tools",
+      "logicalBytes": 252443793,
+      "allocatedBytes": 252443793,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 1087,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Rustup",
+      "logicalBytes": 0,
+      "allocatedBytes": 0,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 0,
+      "skippedLinks": 0,
+      "errors": 0,
+      "missing": true
+    },
+    {
+      "path": "C:\\ghcup",
+      "logicalBytes": 4540014179,
+      "allocatedBytes": 4540014179,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 20701,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\ghc",
+      "logicalBytes": 0,
+      "allocatedBytes": 0,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 0,
+      "skippedLinks": 0,
+      "errors": 0,
+      "missing": true
+    },
+    {
+      "path": "C:\\Program Files\\7-Zip",
+      "logicalBytes": 5920087,
+      "allocatedBytes": 5920087,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 107,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Amazon",
+      "logicalBytes": 517425356,
+      "allocatedBytes": 517425356,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 27527,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Android",
+      "logicalBytes": 342472280,
+      "allocatedBytes": 342472280,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 487,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Application Verifier",
+      "logicalBytes": 392896,
+      "allocatedBytes": 392896,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 3,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Azure Cosmos DB Emulator",
+      "logicalBytes": 2622039247,
+      "allocatedBytes": 2622039247,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 3967,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\CMake",
+      "logicalBytes": 143310580,
+      "allocatedBytes": 143310580,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 8817,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Common Files",
+      "logicalBytes": 69544117,
+      "allocatedBytes": 47573046,
+      "hardlinkedAllocatedBytes": 13533159,
+      "files": 1837,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\docker",
+      "logicalBytes": 77739008,
+      "allocatedBytes": 77739008,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 1,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\dotnet",
+      "logicalBytes": 12541680122,
+      "allocatedBytes": 4783989323,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 73859,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Git",
+      "logicalBytes": 355215675,
+      "allocatedBytes": 355215675,
+      "hardlinkedAllocatedBytes": 59972154,
+      "files": 9530,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\GitHub CLI",
+      "logicalBytes": 42875192,
+      "allocatedBytes": 42875192,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 1,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Google",
+      "logicalBytes": 530914987,
+      "allocatedBytes": 497816536,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 275,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Hyper-V",
+      "logicalBytes": 1087488,
+      "allocatedBytes": 343552,
+      "hardlinkedAllocatedBytes": 343552,
+      "files": 6,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\IIS",
+      "logicalBytes": 7297368,
+      "allocatedBytes": 7297368,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 39,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\IIS Express",
+      "logicalBytes": 29304819,
+      "allocatedBytes": 29304819,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 241,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\ImageMagick-7.1.2-Q16-HDRI",
+      "logicalBytes": 63784403,
+      "allocatedBytes": 63784403,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 526,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Internet Explorer",
+      "logicalBytes": 2571474,
+      "allocatedBytes": 1238996,
+      "hardlinkedAllocatedBytes": 1238528,
+      "files": 12,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\LLVM",
+      "logicalBytes": 2544802006,
+      "allocatedBytes": 2544802006,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 481,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Microsoft",
+      "logicalBytes": 3739563,
+      "allocatedBytes": 3739563,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 53,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Microsoft SDKs",
+      "logicalBytes": 317812146,
+      "allocatedBytes": 317812146,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 11670,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Microsoft Service Fabric",
+      "logicalBytes": 653450466,
+      "allocatedBytes": 653450466,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 1207,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Microsoft SQL Server",
+      "logicalBytes": 476442112,
+      "allocatedBytes": 476442112,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 659,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Microsoft Visual Studio 14.0",
+      "logicalBytes": 1291040,
+      "allocatedBytes": 1291040,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 3,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\ModifiableWindowsApps",
+      "logicalBytes": 0,
+      "allocatedBytes": 0,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 0,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\MongoDB",
+      "logicalBytes": 2078641634,
+      "allocatedBytes": 2078641634,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 31,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\mongosh",
+      "logicalBytes": 206753000,
+      "allocatedBytes": 206753000,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 7,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Mozilla Firefox",
+      "logicalBytes": 366283170,
+      "allocatedBytes": 366283170,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 80,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\MSBuild",
+      "logicalBytes": 25757,
+      "allocatedBytes": 18100,
+      "hardlinkedAllocatedBytes": 8192,
+      "files": 4,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\MySQL",
+      "logicalBytes": 577759613,
+      "allocatedBytes": 577759613,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 285,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\nodejs",
+      "logicalBytes": 98812487,
+      "allocatedBytes": 98812487,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 2030,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\OpenSSL",
+      "logicalBytes": 877642675,
+      "allocatedBytes": 877642675,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 2345,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\PackageManagement",
+      "logicalBytes": 174256,
+      "allocatedBytes": 174256,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 1,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\PostgreSQL",
+      "logicalBytes": 1058685959,
+      "allocatedBytes": 1058685959,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 20679,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\PowerShell",
+      "logicalBytes": 297195541,
+      "allocatedBytes": 297195541,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 1104,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\R",
+      "logicalBytes": 199224306,
+      "allocatedBytes": 199224306,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 4507,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Reference Assemblies",
+      "logicalBytes": 35851751,
+      "allocatedBytes": 12498724,
+      "hardlinkedAllocatedBytes": 11333632,
+      "files": 65,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Uninstall Information",
+      "logicalBytes": 0,
+      "allocatedBytes": 0,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 0,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Unity Hub",
+      "logicalBytes": 625483462,
+      "allocatedBytes": 625483462,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 353,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Windows Defender",
+      "logicalBytes": 47268014,
+      "allocatedBytes": 18503832,
+      "hardlinkedAllocatedBytes": 18503832,
+      "files": 47,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Windows Defender Advanced Threat Protection",
+      "logicalBytes": 265881395,
+      "allocatedBytes": 91194687,
+      "hardlinkedAllocatedBytes": 91194687,
+      "files": 127,
+      "skippedLinks": 0,
+      "errors": 1
+    },
+    {
+      "path": "C:\\Program Files\\Windows Mail",
+      "logicalBytes": 716800,
+      "allocatedBytes": 360448,
+      "hardlinkedAllocatedBytes": 360448,
+      "files": 3,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Windows Media Player",
+      "logicalBytes": 4793481,
+      "allocatedBytes": 1669304,
+      "hardlinkedAllocatedBytes": 1669304,
+      "files": 40,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Windows NT",
+      "logicalBytes": 3008856,
+      "allocatedBytes": 733184,
+      "hardlinkedAllocatedBytes": 733184,
+      "files": 6,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Windows Photo Viewer",
+      "logicalBytes": 5796392,
+      "allocatedBytes": 2894848,
+      "hardlinkedAllocatedBytes": 2894848,
+      "files": 8,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\Windows Sidebar",
+      "logicalBytes": 0,
+      "allocatedBytes": 0,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 0,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\WindowsApps",
+      "logicalBytes": 460086209,
+      "allocatedBytes": 460086209,
+      "hardlinkedAllocatedBytes": 9809933,
+      "files": 1893,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\WindowsPowerShell",
+      "logicalBytes": 2340264942,
+      "allocatedBytes": 2339685712,
+      "hardlinkedAllocatedBytes": 1080428,
+      "files": 2174,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files\\WSL",
+      "logicalBytes": 1224069730,
+      "allocatedBytes": 1224069730,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 646,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Application Verifier",
+      "logicalBytes": 319120,
+      "allocatedBytes": 319120,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 3,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Common Files",
+      "logicalBytes": 36932198,
+      "allocatedBytes": 23374048,
+      "hardlinkedAllocatedBytes": 9894117,
+      "files": 225,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\dotnet",
+      "logicalBytes": 620005075,
+      "allocatedBytes": 620005075,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 3086,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Google",
+      "logicalBytes": 15730062,
+      "allocatedBytes": 15730062,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 9,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\HTML Help Workshop",
+      "logicalBytes": 1091984,
+      "allocatedBytes": 1091984,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 3,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\IIS",
+      "logicalBytes": 3176391,
+      "allocatedBytes": 3176391,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 26,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\IIS Express",
+      "logicalBytes": 27088747,
+      "allocatedBytes": 27088747,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 241,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Inno Setup 6",
+      "logicalBytes": 34123927,
+      "allocatedBytes": 34123927,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 122,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Internet Explorer",
+      "logicalBytes": 1796911,
+      "allocatedBytes": 959335,
+      "hardlinkedAllocatedBytes": 958867,
+      "files": 11,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Microsoft",
+      "logicalBytes": 911483821,
+      "allocatedBytes": 812668393,
+      "hardlinkedAllocatedBytes": 785653459,
+      "files": 623,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Microsoft Analysis Services",
+      "logicalBytes": 200030130,
+      "allocatedBytes": 200030130,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 155,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Microsoft SDKs",
+      "logicalBytes": 5730853466,
+      "allocatedBytes": 5730853466,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 21859,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Microsoft SQL Server",
+      "logicalBytes": 10173302,
+      "allocatedBytes": 10173302,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 53,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Microsoft Visual Studio 14.0",
+      "logicalBytes": 1612827,
+      "allocatedBytes": 1612827,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 23,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Microsoft Web Tools",
+      "logicalBytes": 43745,
+      "allocatedBytes": 43745,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 2,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Microsoft.NET",
+      "logicalBytes": 8089799,
+      "allocatedBytes": 8074056,
+      "hardlinkedAllocatedBytes": 8192,
+      "files": 5,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Mozilla Maintenance Service",
+      "logicalBytes": 387616,
+      "allocatedBytes": 387616,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 4,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\MSBuild",
+      "logicalBytes": 218698426,
+      "allocatedBytes": 218690769,
+      "hardlinkedAllocatedBytes": 8192,
+      "files": 1010,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Nuget",
+      "logicalBytes": 680,
+      "allocatedBytes": 680,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 2,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\pipx",
+      "logicalBytes": 13663321,
+      "allocatedBytes": 13663321,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 1090,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\pipx_bin",
+      "logicalBytes": 0,
+      "allocatedBytes": 0,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 0,
+      "skippedLinks": 1,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Reference Assemblies",
+      "logicalBytes": 804701695,
+      "allocatedBytes": 779596383,
+      "hardlinkedAllocatedBytes": 11918109,
+      "files": 5581,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\sbt",
+      "logicalBytes": 36860526,
+      "allocatedBytes": 36860526,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 8,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Visual Studio",
+      "logicalBytes": 109149493,
+      "allocatedBytes": 109149493,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 53,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Windows Application Driver",
+      "logicalBytes": 7185350,
+      "allocatedBytes": 7185350,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 16,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Windows Defender",
+      "logicalBytes": 5339120,
+      "allocatedBytes": 1894912,
+      "hardlinkedAllocatedBytes": 1894912,
+      "files": 10,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Windows Mail",
+      "logicalBytes": 628736,
+      "allocatedBytes": 352256,
+      "hardlinkedAllocatedBytes": 352256,
+      "files": 3,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Windows Media Player",
+      "logicalBytes": 3299429,
+      "allocatedBytes": 1129869,
+      "hardlinkedAllocatedBytes": 1129869,
+      "files": 26,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Windows NT",
+      "logicalBytes": 2943832,
+      "allocatedBytes": 720896,
+      "hardlinkedAllocatedBytes": 720896,
+      "files": 6,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Windows Photo Viewer",
+      "logicalBytes": 5449256,
+      "allocatedBytes": 2780160,
+      "hardlinkedAllocatedBytes": 2780160,
+      "files": 8,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Windows Sidebar",
+      "logicalBytes": 0,
+      "allocatedBytes": 0,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 0,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\WindowsPowerShell",
+      "logicalBytes": 3423499,
+      "allocatedBytes": 2844044,
+      "hardlinkedAllocatedBytes": 1080428,
+      "files": 138,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\WiX Toolset v3.14",
+      "logicalBytes": 128787530,
+      "allocatedBytes": 128787530,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 558,
+      "skippedLinks": 0,
+      "errors": 0
+    },
+    {
+      "path": "C:\\Program Files (x86)\\Workflow Manager Tools",
+      "logicalBytes": 5044232,
+      "allocatedBytes": 5044232,
+      "hardlinkedAllocatedBytes": 0,
+      "files": 26,
+      "skippedLinks": 0,
+      "errors": 0
+    }
+  ]
+}
