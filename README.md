@@ -75,6 +75,8 @@ previous variants/targets interface is documented in [docs/schema-v2.md](docs/sc
   "schemaVersion": 3,
   "namespace": "$DOCKER_NAMESPACE",
   "image": "$DOCKER_IMAGE",
+  "description": "Native Linux and Windows images for your application",
+  "overviewFile": "README.md",
   "context": ".",
   "matrix": {
     "version": {
@@ -183,6 +185,66 @@ commands and references inside them are never executed or recursively expanded.
 Explicit `envFile` paths must exist. Dotenv supports quotes, escaped quotes,
 `export`, and comments, but not multiline assignments.
 
+### Docker Hub descriptions
+
+Optional root-level `description` and `overviewFile` fields apply to the configured
+`namespace` / `image` repository. Both schema versions `2` and `3` support them;
+they cannot be placed on axes, choices, variants, or targets.
+
+| Field | Meaning |
+| --- | --- |
+| `description` | Single-line Docker Hub short description, at most 100 UTF-8 bytes after environment substitution |
+| `overviewFile` | UTF-8 Markdown overview file, at most 25,000 UTF-8 bytes after URL resolution |
+
+Configure either field independently. Omitting a field preserves its existing
+Docker Hub value. An explicit empty `description` or empty overview file clears
+the corresponding value. Oversized content fails with its size and limit;
+documentation is never truncated.
+
+Resolve `overviewFile` from the **calling repository root**, even if `docker.json`
+is in a subdirectory or `context` points elsewhere. For example,
+`"overviewFile": "docs/docker.md"` reads the caller's `docs/docker.md`. Absolute
+paths, parent traversal, and symlinks outside the repository are rejected. The
+file must exist and contain readable UTF-8 during configuration, including when
+publication is disabled. Markdown contents are read literally, without dotenv
+or matrix substitution.
+
+The overview is parsed as GitHub Flavored Markdown and serialized back to
+Markdown after rewriting links. Formatting and reference notation may normalize;
+code contents remain literal. Embedded HTML URL attributes are handled by an HTML
+parser, and destinations are resolved with URI parsing.
+
+Relative links and images resolve from the **calling repository root**, regardless
+of the overview file's directory. For example, `guide.md` in `docs/docker.md`
+links to the root `guide.md`. Links use GitHub file or directory URLs; images use
+raw content URLs. Both follow the repository's **default branch**, so documentation
+links continue to show current files instead of being pinned to a publication
+commit. Fragment-only links such as `#install` stay relative to the Docker Hub
+overview. Existing absolute URLs stay absolute; protocol-relative URLs such as
+`//example.com/logo.svg` become HTTPS URLs. These links require
+the source repository to be accessible to the reader; private source images
+cannot be displayed publicly on Docker Hub.
+
+Configuration validates and snapshots the overview before any builds start.
+After every image and public tag has been published and verified, the publication
+job performs one Docker Hub metadata update with only the configured fields.
+The destination is never inferred from the GitHub repository name. With
+`publish: false`, no metadata authentication or updates occur and no registry
+credentials are required. Metadata failures fail the workflow with a clear error;
+published tags remain published, and staging cleanup still runs. Rerun the workflow
+after correcting the problem. Documentation-only publication is not supported.
+
+Metadata synchronization reuses `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
+Use a personal access token with **Repo Read, Write, Delete** permission and an
+account allowed to edit the destination repository, including for organization
+namespaces. Push access alone does not establish permission to edit repository
+information. The helper authenticates through `/v2/auth/token` and updates the
+legacy `/v2/repositories/{namespace}/{image}/` endpoint; organization access tokens
+are not supported for this integration. See Docker's
+[repository information](https://docs.docker.com/docker-hub/repos/manage/information/)
+and [access token reference](https://docs.docker.com/security/access-tokens/reference/).
+Neither credentials nor API response bodies are included in synchronization errors.
+
 ### Native builds and compatibility
 
 Targets do not declare OS, architecture, Windows release, or isolation. Runner
@@ -282,7 +344,8 @@ amd64, Linux arm64, Windows LTSC 2019, and Windows LTSC 2022: eight images in fo
 target jobs. Linux uses Alpine; Windows uses NanoServer on `windows-latest`.
 The fixture exercises an explicit configuration path, dotenv substitution,
 inherited build arguments, native architectures, shared stages, Windows release
-selection, recursive axes, matrix substitution, and intermediate OS tags.
+selection, recursive axes, matrix substitution, intermediate OS tags, and optional
+Docker Hub description configuration with a caller-relative overview file.
 
 The **Test image** workflow runs on pull requests and pushes to `main` that change
 its tracked workflows, scripts, or fixture paths, and supports manual dispatch.
@@ -301,10 +364,12 @@ into one pull request. Action references remain pinned to commit SHAs. Updates t
 the v3 workflow and its validation workflow are checked by the unpublished
 example builds.
 
-The implementation uses Python's standard library on runners. Run its focused
-configuration, publication, and cleanup tests locally:
+Native build and publication helpers use Python's standard library. Configuration
+additionally uses pinned Markdown parser/serializer dependencies, installed only
+in the configuration job. Install these before running the local tests:
 
 ```powershell
+python -m pip install -r scripts/requirements-metadata.txt
 python -m unittest discover -s tests -v
 ```
 

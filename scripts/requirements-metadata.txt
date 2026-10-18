@@ -1,0 +1,8 @@
+# Markdown parser, Markdown serializer, GFM support, and their dependencies.
+# Loaded only by the configuration job and local development checks.
+markdown-it-py==4.2.0
+mdformat==1.0.0
+mdformat-gfm==1.0.0
+mdurl==0.1.2
+mdit-py-plugins==0.6.1
+wcwidth==0.9.2

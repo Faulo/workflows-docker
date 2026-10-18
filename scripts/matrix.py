@@ -77,9 +77,20 @@ def axes(matrix):
 
 
 def make_matrix_plan(config, root=None):
+    from hub_metadata import metadata_fields
+
     object_keys(
         config,
-        FIELDS | {"schemaVersion", "namespace", "image", "envFile", "matrix"},
+        FIELDS
+        | {
+            "schemaVersion",
+            "namespace",
+            "image",
+            "envFile",
+            "matrix",
+            "description",
+            "overviewFile",
+        },
         "configuration",
     )
     namespace, image = config.get("namespace"), config.get("image")
@@ -175,6 +186,7 @@ def make_matrix_plan(config, root=None):
 
     walk(pending, merge({}, config), {}, [], [""], [])
     plan = {
+        **metadata_fields(config, root),
         "namespace": namespace,
         "image": image,
         "reference": f"{namespace}/{image}",

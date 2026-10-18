@@ -7,6 +7,19 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-10-18
+
+### Added
+
+- Optional root-level `description` and `overviewFile` in both configuration
+  schemas. Docker Hub metadata synchronizes once after successful tag publication,
+  using a validated overview snapshot with repository-root links and images that
+  follow the calling repository's default branch.
+- Markdown, HTML, and URI parsing for documentation URLs, with GitHub Flavored
+  Markdown support and fragment-only links kept relative to the Docker Hub overview.
+- Validation of metadata types, caller-relative overview files, and UTF-8 content
+  limits without truncation. Unpublished builds require no metadata credentials.
+
 ## [3.1.0] - 2026-10-16
 
 ### Added
@@ -221,7 +234,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   verification after both builds succeed.
 - Serialized publication and usage documentation.
 
-[Unreleased]: https://github.com/Faulo/workflows-docker/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/Faulo/workflows-docker/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/Faulo/workflows-docker/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/Faulo/workflows-docker/compare/v3.0.2...v3.1.0
 [3.0.2]: https://github.com/Faulo/workflows-docker/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/Faulo/workflows-docker/compare/v3.0.0...v3.0.1

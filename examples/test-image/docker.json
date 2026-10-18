@@ -2,6 +2,8 @@
   "schemaVersion": 3,
   "namespace": "$DOCKER_NAMESPACE",
   "image": "$DOCKER_IMAGE",
+  "description": "Native Linux and Windows test images for the reusable Docker workflow",
+  "overviewFile": "examples/test-image/README.md",
   "envFile": "examples/test-image/.env",
   "context": "examples/test-image",
   "buildArgs": {

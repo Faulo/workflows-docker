@@ -145,6 +145,9 @@ def relative_path(value, description, root=None, directory=False):
 
 def make_plan(config, root=None, environment=None):
     config = resolve_config(config, root, environment)
+    from hub_metadata import metadata_fields
+
+    metadata = metadata_fields(config, root)
     if type(config.get("schemaVersion")) is int and config["schemaVersion"] == 3:
         from matrix import make_matrix_plan
 
@@ -156,6 +159,8 @@ def make_plan(config, root=None, environment=None):
             "namespace",
             "image",
             "envFile",
+            "description",
+            "overviewFile",
             "context",
             "buildArgs",
             "targets",
@@ -254,6 +259,7 @@ def make_plan(config, root=None, environment=None):
         group["builds"].append(build["id"])
     require(len(groups) <= 256, "Configuration is limited to 256 matrix jobs")
     plan = {
+        **metadata,
         "namespace": namespace,
         "image": image,
         "reference": f"{namespace}/{image}",
@@ -341,6 +347,19 @@ def main():
         root,
     )
     write_json(args.output, plan)
+    from hub_metadata import prepare_metadata
+
+    # Keep documentation outside the matrix plan's output-size budget. This
+    # snapshot belongs to the same checkout as the Dockerfiles being built.
+    write_json(
+        Path(args.output).with_name("metadata.json"),
+        prepare_metadata(
+            plan,
+            root,
+            os.environ.get("GITHUB_REPOSITORY"),
+            os.environ.get("GITHUB_DEFAULT_BRANCH"),
+        ),
+    )
     outputs = {
         "image": plan["reference"],
         "matrix": json.dumps(
