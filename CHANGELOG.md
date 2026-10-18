@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-10-18
+
 ### Added
 
 - Optional root-level `cleanupWindowsRunner` boolean in both configuration

@@ -249,7 +249,8 @@ Neither credentials nor API response bodies are included in synchronization erro
 
 Optional root-level `cleanupWindowsRunner` opts in to removing host Visual Studio
 installations before each GitHub-hosted Windows build job. It defaults to `false`
-and is available in both configuration schemas:
+and is available in both configuration schemas starting with workflow v3.3.0
+(`@v3` includes this release):
 
 ```json
 "cleanupWindowsRunner": true

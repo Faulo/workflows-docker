@@ -5,6 +5,7 @@ Schema version 2 also accepts the optional root-level boolean
 `cleanupWindowsRunner` (default `false`). See
 [runner preparation](../README.md#native-builds-and-compatibility) for the
 Visual Studio cleanup scope, hosted Windows guard, and capacity limitations.
+This option is available starting with workflow v3.3.0, included in `@v3`.
 
 # Docker building and publishing workflow
 
@@ -218,6 +219,11 @@ and common layers can be reused within a target when their inputs match.
 Windows target jobs build variants sequentially on one Docker daemon,
 retaining intermediate compiler stages locally. They use the previous target-specific
 tag as a best-effort cache across runs and push to run-specific staging tags.
+Starting with workflow v3.3.0, a metadata-only check resolves the final stage's
+external `FROM` and requires its complete ordered base-layer chain to be a prefix
+of the previous publication's chain before pulling the cache. Eligible caches are
+pulled by immutable digest; inconclusive analysis skips the remote cache. See
+[publication behavior](../README.md#publication-behavior) for details.
 Final-image caching does not retain separate compiler stages across fresh runners.
 Windows platform metadata and a nonempty OS version are checked before pushing.
 
