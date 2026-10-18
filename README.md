@@ -247,6 +247,36 @@ Neither credentials nor API response bodies are included in synchronization erro
 
 ### Native builds and compatibility
 
+Optional root-level `cleanupWindowsRunner` opts in to removing host Visual Studio
+installations before each GitHub-hosted Windows build job. It defaults to `false`
+and is available in both configuration schemas:
+
+```json
+"cleanupWindowsRunner": true
+```
+
+The setting applies once per target job, including unpublished builds, before
+cache pulls and native builds. It has no effect on Linux or self-hosted runners;
+both the workflow step and helper enforce the hosted Windows restriction.
+It cannot be set on a variant, target, matrix axis, or choice.
+
+Cleanup removes only `C:\Program Files\Microsoft Visual Studio` and
+`C:\Program Files (x86)\Microsoft Visual Studio`. It validates their fixed paths
+and ancestors before deletion, rejects redirected roots and unexpected file
+types, and removes nested symlinks/junctions as links without following them.
+Missing installations are skipped. Read-only files are handled explicitly;
+other removal errors fail the job. Docker, Git, Python, and PowerShell version
+checks run before and after cleanup, and logs show free space before/after each
+directory and the entire operation. Python 3.12 or newer is required by this
+helper; GitHub-hosted Windows runners supply it.
+
+Use this only when host Visual Studio tools are not needed. SDKs inside image
+stages are independent of these host installations. The
+[measured runner snapshot](docs/windows-runner-storage.md) held 33.77 GB in these
+directories. Recovery varies with runner image updates; it is not a storage
+guarantee or a promise that every image fits. The workflow keeps Docker's existing
+storage location and does not rely on a `D:` volume.
+
 Targets do not declare OS, architecture, Windows release, or isolation. Runner
 labels pass unchanged into `runs-on`. Runtime detection verifies the runner
 against its native Docker daemon. Supported platforms are Linux amd64/arm64 and
@@ -292,6 +322,17 @@ and common layers can be reused within a target when their inputs match.
 Windows target jobs build variants sequentially on one Docker daemon,
 retaining intermediate compiler stages locally. They use the previous target-specific
 tag as a best-effort cache across runs and push to run-specific staging tags.
+Before pulling that cache, the workflow resolves the final stage's external
+`FROM` using global `ARG` defaults, configured build arguments, and stage aliases.
+It inspects registry manifests without downloading layers. The current base's
+complete ordered layer-digest chain must be a prefix of the previous publication's
+chain; partial overlap is insufficient. A matching cache is pulled by immutable
+digest. Different layer encodings can conservatively cause a cache miss.
+Separate compiler-stage bases do not disqualify a usable final-stage cache.
+Unsupported expressions, missing parser dependencies, unavailable metadata, and
+ambiguous native manifests skip the remote cache and continue with local caching.
+The preflight is an eligibility check, not a guarantee of Docker instruction
+cache hits; a mutable base tag can also change between preflight and build.
 Final-image caching does not retain separate compiler stages across fresh runners.
 Windows platform metadata and a nonempty OS version are checked before pushing.
 
@@ -343,6 +384,7 @@ supported by this implementation.
 amd64, Linux arm64, Windows LTSC 2019, and Windows LTSC 2022: eight images in four
 target jobs. Linux uses Alpine; Windows uses NanoServer on `windows-latest`.
 The fixture exercises an explicit configuration path, dotenv substitution,
+opt-in Visual Studio cleanup on hosted Windows runners,
 inherited build arguments, native architectures, shared stages, Windows release
 selection, recursive axes, matrix substitution, intermediate OS tags, and optional
 Docker Hub description configuration with a caller-relative overview file.
@@ -359,17 +401,29 @@ publisher tests.
 
 ## Development checks
 
+The manually dispatched **Audit Windows runner disk space** workflow reports
+`C:` / `D:` capacity and logical versus allocated bytes for candidate host SDK
+directories without deleting anything. It records the runner image version,
+skips redirecting reparse points, includes WOF-compressed files, deduplicates
+file identities within each directory, and
+reports hardlinked bytes and scan errors. Allocated sizes account for file
+compression but remain estimates of possible recovery: external hardlinks and
+overlapping targets can retain or double-count storage. No cleanup runs as part
+of the build workflow.
+
 Dependabot checks GitHub Actions dependencies weekly and groups available updates
 into one pull request. Action references remain pinned to commit SHAs. Updates to
 the v3 workflow and its validation workflow are checked by the unpublished
 example builds.
 
-Native build and publication helpers use Python's standard library. Configuration
+Windows cache analysis additionally uses the pinned `dockerfile-parse` package,
+installed in publishing Windows jobs. Configuration
 additionally uses pinned Markdown parser/serializer dependencies, installed only
 in the configuration job. Install these before running the local tests:
 
 ```powershell
 python -m pip install -r scripts/requirements-metadata.txt
+python -m pip install -r scripts/requirements-build.txt
 python -m unittest discover -s tests -v
 ```
 

@@ -14,7 +14,7 @@ INDEX_DIGEST = "sha256:" + "2" * 64
 
 
 class WindowsBuildTests(unittest.TestCase):
-    def run_build(self, directory, push_output):
+    def run_build(self, directory, push_output, cache=True, local=False, pull_code=0):
         entry = {
             "id": "b000",
             "variant": "latest",
@@ -41,7 +41,10 @@ class WindowsBuildTests(unittest.TestCase):
                 output = "The push refers to repository [example/app]"
             elif args[:2] == ("manifest", "inspect"):
                 output = json.dumps({"Descriptor": {"digest": push_output}})
-            return SimpleNamespace(returncode=0, stdout=output)
+            return SimpleNamespace(
+                returncode=pull_code if args[:2] == ("image", "pull") else 0,
+                stdout=output,
+            )
 
         environment = {
             "BUILD_ENTRY": json.dumps(entry),
@@ -54,8 +57,14 @@ class WindowsBuildTests(unittest.TestCase):
         with (
             patch.dict("os.environ", environment, clear=True),
             patch("build_windows.docker", side_effect=docker_result) as docker,
+            patch(
+                "build_windows.eligible_cache",
+                return_value=(
+                    f"example/app:latest-ltsc2019@{IMAGE_DIGEST}" if cache else None
+                ),
+            ),
         ):
-            main()
+            main(use_local_cache=local)
             return docker
 
     def test_cached_image_with_index_and_image_digests_records_pushed_digest(self):
@@ -72,8 +81,34 @@ class WindowsBuildTests(unittest.TestCase):
                 capture=True,
             )
             docker.assert_any_call(
-                "image", "pull", "example/app:latest-ltsc2019", check=False
+                "image",
+                "pull",
+                f"example/app:latest-ltsc2019@{IMAGE_DIGEST}",
+                check=False,
             )
+
+    def test_ineligible_remote_cache_is_never_pulled_or_passed_to_build(self):
+        with tempfile.TemporaryDirectory() as directory:
+            docker = self.run_build(directory, IMAGE_DIGEST, cache=False)
+        self.assertFalse(
+            any(call.args[:2] == ("image", "pull") for call in docker.call_args_list)
+        )
+        build = next(
+            call.args for call in docker.call_args_list if call.args[0] == "build"
+        )
+        self.assertNotIn("--cache-from", build)
+
+    def test_failed_pull_and_sibling_build_keep_unrestricted_local_cache(self):
+        for options in ({"pull_code": 1}, {"local": True}):
+            with (
+                self.subTest(options=options),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                docker = self.run_build(directory, IMAGE_DIGEST, **options)
+            build = next(
+                call.args for call in docker.call_args_list if call.args[0] == "build"
+            )
+            self.assertNotIn("--cache-from", build)
 
     def test_missing_or_ambiguous_push_digest_does_not_write_a_record(self):
         for output in ("", "latest", IMAGE_DIGEST + "\n" + INDEX_DIGEST):

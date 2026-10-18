@@ -1,0 +1,2 @@
+# Dockerfile instruction parsing for Windows cache preflight (no dependencies).
+dockerfile-parse==2.0.1

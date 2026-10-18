@@ -1,6 +1,11 @@
 > Configuration schema version 2 reference for workflow v3. For recursive matrices
 > using schema version 3, see the [current README](../README.md).
 
+Schema version 2 also accepts the optional root-level boolean
+`cleanupWindowsRunner` (default `false`). See
+[runner preparation](../README.md#native-builds-and-compatibility) for the
+Visual Studio cleanup scope, hosted Windows guard, and capacity limitations.
+
 # Docker building and publishing workflow
 
 A reusable GitHub Actions workflow for building native Linux and Windows Docker

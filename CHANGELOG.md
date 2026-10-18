@@ -7,6 +7,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Optional root-level `cleanupWindowsRunner` boolean in both configuration
+  schemas. Disabled by default; when enabled, GitHub-hosted Windows build jobs
+  remove only the two allowlisted Visual Studio installation directories before
+  cache pulls or builds, log free space, and verify required host tools.
+
+### Fixed
+
+- Skip previous Windows image cache pulls when Dockerfile `FROM` analysis and
+  registry metadata cannot establish the current final base's complete ordered
+  layer chain as a prefix of the cached image. Eligible caches are pulled by
+  immutable digest; unavailable metadata falls back to local caching.
+
 ## [3.2.0] - 2026-10-18
 
 ### Added

@@ -75,6 +75,9 @@
           "pattern": "^[^\\r\\n\\u0000]*$",
           "description": "Optional Docker Hub short description; at most 100 UTF-8 bytes after environment substitution. Omit to preserve the existing value."
         },
+        "cleanupWindowsRunner": {
+          "$ref": "#/$defs/cleanupWindowsRunner"
+        },
         "overviewFile": {
           "$ref": "#/$defs/path",
           "description": "Optional UTF-8 Markdown file relative to the calling repository root. At most 25000 UTF-8 bytes after relative URL resolution. Omit to preserve the existing overview."
@@ -158,6 +161,9 @@
           "pattern": "^[^\\r\\n\\u0000]*$",
           "description": "Optional Docker Hub short description; at most 100 UTF-8 bytes after environment substitution. Omit to preserve the existing value."
         },
+        "cleanupWindowsRunner": {
+          "$ref": "#/$defs/cleanupWindowsRunner"
+        },
         "overviewFile": {
           "$ref": "#/$defs/path",
           "description": "Optional UTF-8 Markdown file relative to the calling repository root. At most 25000 UTF-8 bytes after relative URL resolution. Omit to preserve the existing overview."
@@ -166,6 +172,11 @@
     }
   ],
   "$defs": {
+    "cleanupWindowsRunner": {
+      "type": "boolean",
+      "default": false,
+      "description": "Opt in to removing Visual Studio installations before builds on GitHub-hosted Windows runners. Ignored on Linux and self-hosted runners. Root-level only."
+    },
     "tag": {
       "type": "string",
       "minLength": 1,

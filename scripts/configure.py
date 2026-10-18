@@ -161,6 +161,7 @@ def make_plan(config, root=None, environment=None):
             "envFile",
             "description",
             "overviewFile",
+            "cleanupWindowsRunner",
             "context",
             "buildArgs",
             "targets",
@@ -260,6 +261,7 @@ def make_plan(config, root=None, environment=None):
     require(len(groups) <= 256, "Configuration is limited to 256 matrix jobs")
     plan = {
         **metadata,
+        "cleanupWindowsRunner": cleanup_windows_runner(config),
         "namespace": namespace,
         "image": image,
         "reference": f"{namespace}/{image}",
@@ -272,6 +274,12 @@ def make_plan(config, root=None, environment=None):
         "Configuration exceeds the workflow output size budget",
     )
     return plan
+
+
+def cleanup_windows_runner(config):
+    value = config.get("cleanupWindowsRunner", False)
+    require(type(value) is bool, "cleanupWindowsRunner must be a boolean")
+    return value
 
 
 def validate_targets(targets, root):
@@ -362,6 +370,7 @@ def main():
     )
     outputs = {
         "image": plan["reference"],
+        "cleanup_windows_runner": json.dumps(plan["cleanupWindowsRunner"]),
         "matrix": json.dumps(
             {
                 "include": [

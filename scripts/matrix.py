@@ -7,6 +7,7 @@ from configure import (
     IMAGE,
     TAG,
     arguments,
+    cleanup_windows_runner,
     object_keys,
     relative_path,
     require,
@@ -90,6 +91,7 @@ def make_matrix_plan(config, root=None):
             "matrix",
             "description",
             "overviewFile",
+            "cleanupWindowsRunner",
         },
         "configuration",
     )
@@ -187,6 +189,7 @@ def make_matrix_plan(config, root=None):
     walk(pending, merge({}, config), {}, [], [""], [])
     plan = {
         **metadata_fields(config, root),
+        "cleanupWindowsRunner": cleanup_windows_runner(config),
         "namespace": namespace,
         "image": image,
         "reference": f"{namespace}/{image}",

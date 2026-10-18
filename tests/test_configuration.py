@@ -1,16 +1,86 @@
 import copy
+import json
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from configuration_fixtures import example
+from configuration_fixtures import example, matrix_example
+from configure import main as configure_main
 from configure import make_plan, read_env, relative_path, resolve_config, substitute
 from detect_platform import native_platform
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_cleanup_flag_reaches_workflow_job_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "windows").mkdir()
+            (root / "windows/Dockerfile").write_text("FROM example/base\n")
+            config = example("windows-only")
+            config["cleanupWindowsRunner"] = True
+            (root / "docker.json").write_text(json.dumps(config))
+            output = root / "github-output.txt"
+            with (
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)}, clear=True),
+                patch("configure.Path.cwd", return_value=root),
+                patch(
+                    "sys.argv",
+                    [
+                        "configure.py",
+                        "--config",
+                        "docker.json",
+                        "--output",
+                        str(root / "plan.json"),
+                    ],
+                ),
+            ):
+                configure_main()
+            self.assertIn("cleanup_windows_runner=true\n", output.read_text())
+            self.assertTrue(
+                json.loads((root / "plan.json").read_text())["cleanupWindowsRunner"]
+            )
+
+    def test_runner_cleanup_defaults_and_strict_boolean_in_both_schemas(self):
+        for fixture in (example, matrix_example):
+            for value in (None, False, True, "true", "false", 0, 1, [], {}):
+                config = fixture()
+                if value is not None:
+                    config["cleanupWindowsRunner"] = value
+                with self.subTest(schema=config["schemaVersion"], value=value):
+                    if value is None or type(value) is bool:
+                        self.assertIs(
+                            value or False, make_plan(config)["cleanupWindowsRunner"]
+                        )
+                    else:
+                        with self.assertRaisesRegex(ValueError, "must be a boolean"):
+                            make_plan(config)
+            config = fixture()
+            config["cleanupWindowsRunner"] = None
+            with self.assertRaisesRegex(ValueError, "must be a boolean"):
+                make_plan(config)
+
+    def test_runner_cleanup_is_root_only(self):
+        for nested in ("target", "variant", "axis", "choice"):
+            config = example() if nested in ("target", "variant") else matrix_example()
+            if nested == "target":
+                item = config["targets"][0]
+            elif nested == "variant":
+                item = config["variants"][0]
+            elif nested == "axis":
+                item = config["matrix"]["version"]
+            else:
+                item = config["matrix"]["version"]["tags"]["1.0"]
+            item["cleanupWindowsRunner"] = True
+            with (
+                self.subTest(nested=nested),
+                self.assertRaisesRegex(ValueError, "Unknown properties"),
+            ):
+                make_plan(config)
+
     def test_supported_configuration_shapes(self):
         expected = {"multi-platform": 21, "windows-families": 4, "windows-only": 1}
         for kind, build_count in expected.items():

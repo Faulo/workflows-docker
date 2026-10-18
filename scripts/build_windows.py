@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 from configure import require, write_json
+from windows_cache import eligible_cache
 
 
 def docker(*args, capture=False, check=True):
@@ -56,13 +57,21 @@ def main(use_local_cache=False):
     )
     target_image = f"{image}:{tag}"
     cache_image = f"{image}:{entry['tag']}"
-    # A cold cache or an incompatible previous manifest must not prevent a build.
-    pulled = docker("image", "pull", cache_image, check=False)
+    # Obsolete bases make the previous image expensive to pull but useless as a
+    # classic build cache. Check metadata before downloading its layers.
+    cache_reference = eligible_cache(entry, cache_image)
+    pulled = (
+        docker("image", "pull", cache_reference, check=False)
+        if cache_reference
+        else None
+    )
     # Legacy --cache-from restricts eligible local layers to that image's
     # ancestry, excluding compiler stages. Sibling builds need unrestricted
     # local cache; a missing remote cache must not disable it either.
     cache_source = (
-        cache_image if pulled.returncode == 0 and not use_local_cache else None
+        cache_reference
+        if pulled is not None and pulled.returncode == 0 and not use_local_cache
+        else None
     )
     docker(*build_command(entry, target_image, cache_source))
     inspection = json.loads(

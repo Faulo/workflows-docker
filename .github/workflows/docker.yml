@@ -33,6 +33,7 @@ jobs:
     outputs:
       image: ${{ steps.plan.outputs.image }}
       matrix: ${{ steps.plan.outputs.matrix }}
+      cleanup_windows_runner: ${{ steps.plan.outputs.cleanup_windows_runner }}
     steps:
       - name: Checkout caller
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -98,6 +99,15 @@ jobs:
           ref: ${{ job.workflow_sha }}
           path: workflow
           persist-credentials: false
+      - name: Reclaim Visual Studio disk space
+        if: runner.os == 'Windows' && runner.environment == 'github-hosted' && needs.configuration.outputs.cleanup_windows_runner == 'true'
+        env:
+          CLEANUP_WINDOWS_RUNNER: ${{ needs.configuration.outputs.cleanup_windows_runner }}
+        run: python workflow/scripts/prepare_windows_runner.py
+      - name: Install Windows cache parser
+        if: runner.os == 'Windows' && inputs.publish
+        continue-on-error: true
+        run: python -m pip install --disable-pip-version-check -r workflow/scripts/requirements-build.txt
       - name: Ensure Windows Docker is running
         if: runner.os == 'Windows'
         shell: pwsh

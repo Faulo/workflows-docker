@@ -1,5 +1,6 @@
 {
   "schemaVersion": 3,
+  "cleanupWindowsRunner": true,
   "namespace": "$DOCKER_NAMESPACE",
   "image": "$DOCKER_IMAGE",
   "description": "Native Linux and Windows test images for the reusable Docker workflow",
