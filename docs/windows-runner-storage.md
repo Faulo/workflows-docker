@@ -88,6 +88,22 @@ consumer jobs and self-hosted runners have a separate dependency contract.
 
 ## Limits and next validation
 
+The opt-in implementation was subsequently validated in
+[fixture run 39167173231](https://github.com/Faulo/workflows-docker/actions/runs/39167173231)
+at commit `ac9bf0179a7572d05be63948429b4ff046950a93`, on the same runner image
+version. Both Windows target jobs removed only the two Visual Studio directories:
+
+| Target job | Free before | Free after | Actual increase |
+| --- | ---: | ---: | ---: |
+| Windows LTSC 2019 | 30.59 GB | 64.56 GB | 33.97 GB |
+| Windows LTSC 2022 | 33.45 GB | 67.42 GB | 33.97 GB |
+
+The operation took about two minutes per job, including path/content inspection
+and host-tool checks. Docker, Git, Python, and PowerShell checks passed after
+removal. All eight fixture images built and verified; Linux skipped cleanup.
+The actual increase differs from the initial file-size estimate because it also
+reflects filesystem allocation and concurrent runner activity.
+
 The audit uses `GetCompressedFileSizeW` and includes WOF-compressed files while
 skipping redirecting reparse points. File identities are deduplicated within each
 target. File sizes are not a deletion experiment: cluster allocation, filesystem
@@ -95,8 +111,8 @@ metadata, outside hardlinks, and concurrent runner activity can affect recovered
 free space. The broad scan had one access error in Windows Defender Advanced
 Threat Protection, which is outside the shortlist and should be preserved.
 
-No tools were deleted and no Docker data was pruned. Before enabling cleanup,
-measure actual free space before/after each allowlisted removal and verify host
-tool availability, native fixture builds, and the full Unreal build. Record peak
-build storage separately; a 25.66 GB resulting image is not a peak-space budget.
-Moving Docker storage to the much emptier `D:` volume is also worth evaluating.
+The original read-only audit deleted no tools; the subsequent fixture run performed
+the opt-in Visual Studio removal described above. Neither operation pruned Docker
+data. The full Unreal build still needs its own retry. Record peak build storage
+separately; a 25.66 GB resulting image is not a peak-space budget. Docker's existing
+storage location remains unchanged, without a dependency on `D:` capacity.

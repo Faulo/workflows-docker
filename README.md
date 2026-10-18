@@ -273,7 +273,9 @@ helper; GitHub-hosted Windows runners supply it.
 Use this only when host Visual Studio tools are not needed. SDKs inside image
 stages are independent of these host installations. The
 [measured runner snapshot](docs/windows-runner-storage.md) held 33.77 GB in these
-directories. Recovery varies with runner image updates; it is not a storage
+directories. A subsequent [native fixture run](https://github.com/Faulo/workflows-docker/actions/runs/39167173231)
+measured approximately 33.97 GB recovered per Windows job, with all eight images
+built and verified. Recovery varies with runner image updates; it is not a storage
 guarantee or a promise that every image fits. The workflow keeps Docker's existing
 storage location and does not rely on a `D:` volume.
 
