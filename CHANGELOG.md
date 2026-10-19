@@ -7,6 +7,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [3.3.1] - 2026-10-20
+
+### Fixed
+
+- Reduce publication registry requests by inspecting raw manifests rather than
+  recursively loading every child image and attestation for each alias. Isolate
+  publication credentials from preinstalled runner registry tokens.
+
 ## [3.3.0] - 2026-10-18
 
 ### Added

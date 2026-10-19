@@ -358,6 +358,10 @@ before publication. It preserves Linux attestations and Windows OS metadata,
 then verifies each public tag against the expected image digests and platforms.
 Aliases must reference the same final index digest as their product tag. A
 publication summary lists the resulting tags, index digests, and image platforms.
+Manifest verification reads raw manifest bytes and computes their digests locally,
+avoiding recursive downloads of child images and attestations for each alias.
+The publication job uses an isolated Docker credential directory so preinstalled
+runner registry tokens cannot override its Docker Hub login.
 
 Windows staging tags begin with reserved `wf-v3-` names and are deleted after
 publication or a build failure, including earlier attempts of the same run. Because

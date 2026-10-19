@@ -1,5 +1,7 @@
+import hashlib
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -13,7 +15,13 @@ from build_windows import build_command, staging_tag
 from cleanup import cleanup, staging_tags
 from configuration_fixtures import example
 from configure import make_plan
-from publish import load_records, publish, source_descriptors, verify_manifest
+from publish import (
+    docker_json,
+    load_records,
+    publish,
+    source_descriptors,
+    verify_manifest,
+)
 
 DIGEST = "sha256:" + "1" * 64
 OTHER = "sha256:" + "2" * 64
@@ -29,6 +37,57 @@ def descriptor(digest=DIGEST, os_name="linux", architecture="amd64", version=Non
 
 
 class PublicationTests(unittest.TestCase):
+    def test_manifest_inspection_reads_only_raw_manifest_and_hashes_exact_bytes(self):
+        for document in (
+            {"schemaVersion": 2, "mediaType": MEDIA, "config": {"digest": OTHER}},
+            {"schemaVersion": 2, "manifests": [descriptor()]},
+        ):
+            with self.subTest(document=document):
+                payload = (json.dumps(document, indent=2) + "\n").encode()
+                with patch("publish.subprocess.run") as run:
+                    run.return_value.stdout = payload
+                    result = docker_json(
+                        "inspect",
+                        "example/app:latest",
+                        "--format",
+                        "{{json .Manifest}}",
+                    )
+                self.assertEqual(
+                    [
+                        "docker",
+                        "buildx",
+                        "imagetools",
+                        "inspect",
+                        "example/app:latest",
+                        "--raw",
+                    ],
+                    run.call_args.args[0],
+                )
+                self.assertEqual(
+                    {
+                        **document,
+                        "digest": "sha256:" + hashlib.sha256(payload).hexdigest(),
+                        "size": len(payload),
+                    },
+                    result,
+                )
+
+    def test_other_inspection_formats_and_native_failures_are_preserved(self):
+        with patch("publish.subprocess.run") as run:
+            run.return_value.stdout = b'{"os":"windows"}'
+            self.assertEqual(
+                {"os": "windows"},
+                docker_json(
+                    "inspect", "example/app@" + DIGEST, "--format", "{{json .Image}}"
+                ),
+            )
+            self.assertEqual("{{json .Image}}", run.call_args.args[0][-1])
+            run.side_effect = subprocess.CalledProcessError(1, "docker")
+            with self.assertRaises(subprocess.CalledProcessError):
+                docker_json(
+                    "inspect", "example/app:latest", "--format", "{{json .Manifest}}"
+                )
+
     def test_target_tags_preserve_only_their_image_and_attestations(self):
         config = example()
         config["targets"] = [config["targets"][0], config["targets"][2]]

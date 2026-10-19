@@ -1,6 +1,7 @@
 """Assemble public manifests from immutable build results and verify aliases."""
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -13,13 +14,24 @@ from configure import require, write_json
 
 
 def docker_json(*args):
+    # Formatted inspection eagerly loads every child image and attestation.
+    # Raw inspection needs only the requested manifest, even for public aliases.
+    raw_manifest = args[0] == "inspect" and args[-2:] == (
+        "--format",
+        "{{json .Manifest}}",
+    )
+    if raw_manifest:
+        args = (*args[:-2], "--raw")
     result = subprocess.run(
         ["docker", "buildx", "imagetools", *args],
         check=True,
         stdout=subprocess.PIPE,
-        text=True,
     )
-    return json.loads(result.stdout)
+    document = json.loads(result.stdout)
+    if raw_manifest:
+        document["digest"] = "sha256:" + hashlib.sha256(result.stdout).hexdigest()
+        document["size"] = len(result.stdout)
+    return document
 
 
 def descriptor_key(descriptor):
