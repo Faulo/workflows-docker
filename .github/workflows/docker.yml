@@ -64,6 +64,12 @@ jobs:
             exit 1
           fi
           python ../workflow/scripts/configure.py --config "$CONFIG_PATH" --output ../plan/plan.json
+      - name: Check Docker Hub authentication and quota
+        if: inputs.publish
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: python workflow/scripts/check_registry_auth.py
       - name: Store publication plan
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -84,6 +90,7 @@ jobs:
     timeout-minutes: ${{ matrix.timeoutMinutes }}
     env:
       IMAGE: ${{ needs.configuration.outputs.image }}
+      DOCKER_CONFIG: ${{ github.workspace }}/.docker-build
       PYTHONUTF8: "1"
       RECORD_DIRECTORY: ${{ github.workspace }}/docker-v3-records/${{ github.run_id }}/${{ github.run_attempt }}/${{ matrix.id }}
     steps:

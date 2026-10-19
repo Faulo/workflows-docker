@@ -7,6 +7,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [3.3.2] - 2026-10-20
+
+### Fixed
+
+- Isolate build credentials as well as publication credentials. Check registry
+  authentication and quota before expensive publishing builds start, without
+  consuming a pull or printing credentials.
+
 ## [3.3.1] - 2026-10-20
 
 ### Fixed
