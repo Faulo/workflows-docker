@@ -51,7 +51,7 @@ class WindowsBuildTests(unittest.TestCase):
             "BUILD_PLATFORM": "windows/amd64",
             "IMAGE": "example/app",
             "GITHUB_RUN_ID": "123",
-            "GITHUB_RUN_ATTEMPT": "1",
+            "GITHUB_SHA": "a" * 40,
             "RECORD_DIRECTORY": directory,
         }
         with (
@@ -77,7 +77,7 @@ class WindowsBuildTests(unittest.TestCase):
                 "manifest",
                 "inspect",
                 "--verbose",
-                "example/app:wf-v3-123-1-b000",
+                "example/app:latest-ltsc2019-aaaaaaaaaaaa-123",
                 capture=True,
             )
             docker.assert_any_call(

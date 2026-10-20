@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 from configure import require, write_json
+from staging import staging_tag
 from windows_cache import eligible_cache
 
 
@@ -17,14 +18,6 @@ def docker(*args, capture=False, check=True):
         stdout=subprocess.PIPE if capture else None,
         text=True,
     )
-
-
-def staging_tag(build_id, run_id, attempt):
-    require(
-        str(run_id).isdigit() and str(attempt).isdigit(),
-        "Invalid workflow run identity",
-    )
-    return f"wf-v3-{run_id}-{attempt}-{build_id}"
 
 
 def build_command(entry, target_image, cache_image=None):
@@ -53,7 +46,7 @@ def main(use_local_cache=False):
     }
     image = os.environ["IMAGE"]
     tag = staging_tag(
-        entry["id"], os.environ["GITHUB_RUN_ID"], os.environ["GITHUB_RUN_ATTEMPT"]
+        entry["tag"], os.environ["GITHUB_SHA"], os.environ["GITHUB_RUN_ID"]
     )
     target_image = f"{image}:{tag}"
     cache_image = f"{image}:{entry['tag']}"

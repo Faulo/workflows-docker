@@ -15,6 +15,39 @@ from detect_platform import native_platform
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_staging_collision_fails_before_plan_is_saved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "windows").mkdir()
+            (root / "windows/Dockerfile").write_text("FROM example/base\n")
+            config = example("windows-only")
+            original = make_plan(config)
+            colliding = original["builds"][0]["tag"] + "-aaaaaaaaaaaa-123"
+            config["variants"][0]["aliases"] = [colliding]
+            (root / "docker.json").write_text(json.dumps(config))
+            output = root / "plan.json"
+            with (
+                patch.dict(
+                    os.environ,
+                    {"PUBLISH": "true", "GITHUB_SHA": "a" * 40, "GITHUB_RUN_ID": "123"},
+                    clear=True,
+                ),
+                patch("configure.Path.cwd", return_value=root),
+                patch(
+                    "sys.argv",
+                    [
+                        "configure.py",
+                        "--config",
+                        "docker.json",
+                        "--output",
+                        str(output),
+                    ],
+                ),
+                self.assertRaisesRegex(ValueError, "configured public tag"),
+            ):
+                configure_main()
+            self.assertFalse(output.exists())
+
     def test_cleanup_flag_reaches_workflow_job_output(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

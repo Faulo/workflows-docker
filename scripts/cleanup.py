@@ -1,4 +1,4 @@
-"""Delete only this workflow run's reserved Windows staging tags."""
+"""Delete only the staging names computed for this workflow run."""
 
 import argparse
 import json
@@ -8,19 +8,11 @@ from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from build_windows import staging_tag
+from staging import staging_tags
 
 
-def staging_tags(plan, run_id, attempt):
-    return [
-        staging_tag(build["id"], run_id, number)
-        for build in plan["builds"]
-        for number in range(1, int(attempt) + 1)
-    ]
-
-
-def cleanup(plan, username, token, run_id, attempt, request=urlopen):
-    tags = staging_tags(plan, run_id, attempt)
+def cleanup(plan, username, token, run_id, source_sha, request=urlopen):
+    tags = staging_tags(plan, source_sha, run_id)
     if not tags:
         return
     payload = json.dumps({"identifier": username, "secret": token}).encode()
@@ -54,7 +46,7 @@ def cleanup(plan, username, token, run_id, attempt, request=urlopen):
             errors.append(f"{tag}: {error}")
     if errors:
         raise RuntimeError("Failed to clean staging tags: " + "; ".join(errors))
-    print(f"Cleaned {len(tags)} possible staging tags, including earlier run attempts")
+    print(f"Cleaned {len(tags)} possible staging tags for this run")
 
 
 if __name__ == "__main__":
@@ -66,5 +58,5 @@ if __name__ == "__main__":
         os.environ["DOCKERHUB_USERNAME"],
         os.environ["DOCKERHUB_TOKEN"],
         os.environ["GITHUB_RUN_ID"],
-        os.environ["GITHUB_RUN_ATTEMPT"],
+        os.environ["GITHUB_SHA"],
     )

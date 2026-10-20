@@ -354,6 +354,10 @@ def main():
         ),
         root,
     )
+    if os.environ.get("PUBLISH") == "true":
+        from staging import staging_tags
+
+        staging_tags(plan, os.environ["GITHUB_SHA"], os.environ["GITHUB_RUN_ID"])
     write_json(args.output, plan)
     from hub_metadata import prepare_metadata
 

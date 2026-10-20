@@ -211,8 +211,6 @@ jobs:
     timeout-minutes: 30
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      # Exclude preinstalled runner registry tokens from publication credentials.
-      DOCKER_CONFIG: ${{ github.workspace }}/.docker-publication
     steps:
       - name: Checkout workflow implementation
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -240,14 +238,9 @@ jobs:
           pattern: docker-v3-record-*
           merge-multiple: true
           path: records
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
-      - name: Login to Docker Hub
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Publish and verify public tags
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: python workflow/scripts/publish.py --plan plan/plan.json --records records
       - name: Synchronize Docker Hub descriptions
         env:

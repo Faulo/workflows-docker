@@ -353,26 +353,38 @@ This validates image construction; application tests run separately.
 
 Build results and the publication plan are passed between jobs as short-lived
 artifacts. All configured builds must succeed before public tags move. The
-publisher inspects every immutable source digest and dry-runs every product index
+publisher inspects every immutable source digest and prepares every product index
 before publication. It preserves Linux attestations and Windows OS metadata,
 then verifies each public tag against the expected image digests and platforms.
 Aliases must reference the same final index digest as their product tag. A
 publication summary lists the resulting tags, index digests, and image platforms.
-Manifest verification reads raw manifest bytes and computes their digests locally,
-avoiding recursive downloads of child images and attestations for each alias.
-Build and publication jobs use isolated Docker credential directories so
-preinstalled runner registry tokens cannot override their Docker Hub login.
+The publisher uses the Docker Registry API with an explicitly authenticated token
+scoped to the configured repository's pull and push permissions. It uploads only
+index JSON: all referenced images and attestations already exist in that same
+repository. It does not copy their manifests or layers again for each public tag.
+Manifest verification reads raw bytes and computes their digests locally. Tokens
+refresh on expiry or one HTTP 401; errors never fall back to anonymous requests.
+Build jobs use an isolated Docker credential directory so preinstalled runner
+registry tokens cannot override their Docker Hub login.
 Before publishing builds start, an authenticated token check reports the pull
 quota using a HEAD request. Anonymous tokens and exhausted quotas stop the run
 before image construction; unpublished builds skip this check.
 
-Windows staging tags begin with reserved `wf-v3-` names and are deleted after
-publication or a build failure, including earlier attempts of the same run. Because
-runner labels are opaque, cleanup checks reserved staging names for all targets;
-Linux names return 404. A cleanup failure is reported as a workflow failure.
+Windows staging tags use `<public-tag>-<12-character-source-sha>-<run-id>`, for
+example `8.2-windows-ltsc2019-27adeb663eb6-39495899061`. The SHA identifies the
+calling repository's source, and the run ID distinguishes executions. Reruns of
+the same run reuse these staging names. Long public tags are shortened with a
+16-character hash of their complete name so the result fits Docker's 128-character
+limit. Before publishing builds start, configuration rejects any collision between
+staging names or with a configured public tag.
+
+Cleanup derives these exact names from the plan and run identity and deletes them
+after publication or a build failure. Because runner labels are opaque, it checks
+possible staging names for all targets; Linux names return 404.
+A cleanup failure is reported as a workflow failure.
 Runner loss or cancellation can interrupt cleanup, and untagged image blobs
-remain subject to Docker Hub's retention policy. Cleanup never deletes historical
-or configured public tags.
+remain subject to Docker Hub's retention policy. Cleanup does not enumerate or
+prune historical tags, and rejects names that match configured public tags.
 
 Publications are serialized per consumer repository. Caller and callee use
 different concurrency groups to avoid cancelling one another. Multiple product

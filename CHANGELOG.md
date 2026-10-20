@@ -7,6 +7,19 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- Name Windows staging tags after their public leaf tag, shortened caller commit
+  SHA, and workflow run ID. Reuse names on reruns, shorten long names with a hash,
+  and reject collisions with configured public tags before builds or cleanup.
+
+### Fixed
+
+- Publish index JSON directly through authenticated Docker Registry API requests,
+  avoiding Buildx's repeated child-manifest copies within the same repository.
+  Verify repository pull/push permissions, refresh expired tokens, and preserve
+  Linux attestations, Windows OS metadata, and identical alias digests.
+
 ## [3.3.2] - 2026-10-20
 
 ### Fixed

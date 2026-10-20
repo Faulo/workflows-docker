@@ -12,6 +12,7 @@ from cleanup import staging_tags
 from configuration_fixtures import matrix_example
 from configure import make_plan, unique_object
 from publish import publish
+from registry_fixtures import MemoryRegistry
 
 
 class MatrixTests(unittest.TestCase):
@@ -188,7 +189,7 @@ class MatrixTests(unittest.TestCase):
 
     def test_publication_preserves_selected_sources_and_verifies_aliases(self):
         plan = make_plan(matrix_example())
-        sources, records, manifests, published = {}, {}, {}, {}
+        sources, records, manifests = {}, {}, {}
         for number, build in enumerate(plan["builds"]):
             digest = "sha256:" + format(number + 1, "064x")
             windows = build["matrix"]["os"] == "windows"
@@ -230,89 +231,29 @@ class MatrixTests(unittest.TestCase):
                 else {k: v for k, v in descriptor.items() if k != "platform"},
                 platform,
             )
-        preflights, verified = [], []
-
-        def entries(args):
-            return [
-                json.loads(Path(args[i + 1]).read_text())
-                for i, arg in enumerate(args)
-                if arg == "--file"
-            ]
-
-        def inspect(*args):
-            if args[0] == "create":
-                preflights.append(args[3])
-                return {"manifests": entries(args)}
-            if "@" in args[1]:
-                manifest, platform = manifests[args[1].split("@")[1]]
-                return platform if args[-1] == "{{json .Image}}" else manifest
-            verified.append(args[1])
-            return published[args[1]]
-
-        def run(command, **kwargs):
-            self.assertEqual(14, len(preflights))
-            digest = "sha256:" + format(len(published) + 200, "064x")
-            for i, arg in enumerate(command):
-                if arg == "--tag":
-                    published[command[i + 1]] = {
-                        "digest": digest,
-                        "manifests": entries(command),
-                    }
-            Path(command[-1]).write_text(
-                json.dumps({"containerimage.descriptor": {"digest": digest}})
-            )
-
-        with (
-            patch("publish.subprocess.run", side_effect=run),
-            patch.dict(os.environ, {}, clear=True),
-        ):
-            publish(plan, records, "example/app", inspect)
-        self.assertEqual(set(published), set(verified))
+        registry = MemoryRegistry("example/app")
+        for digest, (manifest, platform) in manifests.items():
+            registry.documents[digest] = manifest
+            registry.configs[digest] = platform
+        with patch.dict(os.environ, {}, clear=True):
+            publish(plan, records, "example/app", registry)
         for publication in plan["publications"]:
             expected = [
                 entry
                 for build_id in publication["builds"]
                 for entry in sources[build_id]
             ]
-            primary = published["example/app:" + publication["tags"][0]]
+            primary = registry.tags[publication["tags"][0]]
             self.assertEqual(expected, primary["manifests"])
             for tag in publication["tags"]:
-                self.assertEqual(primary, published["example/app:" + tag])
+                self.assertEqual(primary, registry.tags[tag])
+        self.assertEqual(14, len(plan["publications"]))
         self.assertTrue(
             all(
-                tag.startswith("wf-v3-123-1-") for tag in staging_tags(plan, "123", "1")
+                tag.endswith("-aaaaaaaaaaaa-123")
+                for tag in staging_tags(plan, "a" * 40, "123")
             )
         )
-
-        def incomplete_group(*args):
-            result = inspect(*args)
-            if args[0] == "create" and args[3].endswith(":2.0-linux"):
-                return {"manifests": result["manifests"][:1]}
-            return result
-
-        preflights.clear()
-        with (
-            patch("publish.subprocess.run") as create,
-            self.assertRaisesRegex(ValueError, "expected digests or platform metadata"),
-        ):
-            publish(plan, records, "example/app", incomplete_group)
-        create.assert_not_called()
-
-        def wrong_group_alias(*args):
-            result = inspect(*args)
-            if args[0] == "inspect" and args[1].endswith(":latest-windows"):
-                return {**result, "digest": "sha256:" + "f" * 64}
-            return result
-
-        preflights.clear()
-        published.clear()
-        with (
-            patch("publish.subprocess.run", side_effect=run),
-            self.assertRaisesRegex(
-                ValueError, "does not reference the published digest"
-            ),
-        ):
-            publish(plan, records, "example/app", wrong_group_alias)
 
 
 if __name__ == "__main__":

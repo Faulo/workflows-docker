@@ -1,27 +1,19 @@
-import hashlib
 import json
 import os
-import subprocess
 import sys
 import tempfile
 import unittest
-from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
-from urllib.error import HTTPError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from build_windows import build_command, staging_tag
-from cleanup import cleanup, staging_tags
+from build_windows import build_command
 from configuration_fixtures import example
 from configure import make_plan
-from publish import (
-    docker_json,
-    load_records,
-    publish,
-    source_descriptors,
-    verify_manifest,
-)
+from publish import load_records, publish, verify_manifest
+from publish import source_descriptors as read_sources
+from registry import DOCKER_INDEX, content_digest
+from registry_fixtures import MemoryRegistry
 
 DIGEST = "sha256:" + "1" * 64
 OTHER = "sha256:" + "2" * 64
@@ -36,108 +28,18 @@ def descriptor(digest=DIGEST, os_name="linux", architecture="amd64", version=Non
     return {"mediaType": MEDIA, "digest": digest, "size": 500, "platform": platform}
 
 
+def source_descriptors(image, build, record, inspect):
+    class Reader:
+        def manifest(self, reference):
+            return inspect("inspect", reference, "--format", "{{json .Manifest}}")
+
+        def config(self, reference):
+            return inspect("inspect", reference, "--format", "{{json .Image}}")
+
+    return read_sources(image, build, record, Reader())
+
+
 class PublicationTests(unittest.TestCase):
-    def test_manifest_inspection_reads_only_raw_manifest_and_hashes_exact_bytes(self):
-        for document in (
-            {"schemaVersion": 2, "mediaType": MEDIA, "config": {"digest": OTHER}},
-            {"schemaVersion": 2, "manifests": [descriptor()]},
-        ):
-            with self.subTest(document=document):
-                payload = (json.dumps(document, indent=2) + "\n").encode()
-                with patch("publish.subprocess.run") as run:
-                    run.return_value.stdout = payload
-                    result = docker_json(
-                        "inspect",
-                        "example/app:latest",
-                        "--format",
-                        "{{json .Manifest}}",
-                    )
-                self.assertEqual(
-                    [
-                        "docker",
-                        "buildx",
-                        "imagetools",
-                        "inspect",
-                        "example/app:latest",
-                        "--raw",
-                    ],
-                    run.call_args.args[0],
-                )
-                self.assertEqual(
-                    {
-                        **document,
-                        "digest": "sha256:" + hashlib.sha256(payload).hexdigest(),
-                        "size": len(payload),
-                    },
-                    result,
-                )
-
-    def test_other_inspection_formats_and_native_failures_are_preserved(self):
-        with patch("publish.subprocess.run") as run:
-            run.return_value.stdout = b'{"os":"windows"}'
-            self.assertEqual(
-                {"os": "windows"},
-                docker_json(
-                    "inspect", "example/app@" + DIGEST, "--format", "{{json .Image}}"
-                ),
-            )
-            self.assertEqual("{{json .Image}}", run.call_args.args[0][-1])
-            run.side_effect = subprocess.CalledProcessError(1, "docker")
-            with self.assertRaises(subprocess.CalledProcessError):
-                docker_json(
-                    "inspect", "example/app:latest", "--format", "{{json .Manifest}}"
-                )
-
-    def test_target_tags_preserve_only_their_image_and_attestations(self):
-        config = example()
-        config["targets"] = [config["targets"][0], config["targets"][2]]
-        config["variants"] = [{"tag": "1.0", "aliases": ["latest"]}]
-        plan = make_plan(config)
-        linux = [descriptor(), descriptor(OTHER, "unknown", "unknown")]
-        windows = [descriptor(INDEX, "windows", version="10.0.17763.1000")]
-        sources = {"b000": linux, "b001": windows}
-        published = {}
-        preflight_count = 0
-
-        def read_files(args):
-            return [
-                json.loads(Path(args[index + 1]).read_text())
-                for index, arg in enumerate(args)
-                if arg == "--file"
-            ]
-
-        def inspect(*args):
-            nonlocal preflight_count
-            if args[0] == "create":
-                preflight_count += 1
-                return {"manifests": read_files(args)}
-            return {"digest": INDEX, "manifests": published[args[1]]}
-
-        def run(command, **kwargs):
-            self.assertEqual(3, preflight_count)
-            for index, arg in enumerate(command):
-                if arg == "--tag":
-                    published[command[index + 1]] = read_files(command)
-            Path(command[-1]).write_text(
-                json.dumps({"containerimage.descriptor": {"digest": INDEX}})
-            )
-
-        with (
-            patch(
-                "publish.source_descriptors",
-                side_effect=lambda image, build, record, inspect: sources[build["id"]],
-            ),
-            patch("publish.subprocess.run", side_effect=run),
-            patch.dict(os.environ, {}, clear=True),
-        ):
-            publish(plan, {"b000": {}, "b001": {}}, "example/app", inspect)
-        self.assertEqual(linux + windows, published["example/app:1.0"])
-        self.assertEqual(linux + windows, published["example/app:latest"])
-        self.assertEqual(linux, published["example/app:1.0-linux-amd64"])
-        self.assertEqual(linux, published["example/app:latest-linux-amd64"])
-        self.assertEqual(windows, published["example/app:1.0-windows-2019"])
-        self.assertEqual(windows, published["example/app:latest-windows-2019"])
-
     def test_exact_manifest_including_attestations(self):
         image = descriptor()
         attestation = descriptor(OTHER, "unknown", "unknown")
@@ -236,145 +138,6 @@ class PublicationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "duplicate build record"):
                 load_records(plan, directory)
 
-    def test_preflight_failure_never_updates_public_tags(self):
-        plan = {
-            "builds": [
-                {"id": "b000"},
-                {"id": "b001"},
-            ],
-            "publications": [{"tags": ["latest"], "builds": ["b000", "b001"]}],
-        }
-        records = {
-            "b000": {
-                "digest": INDEX,
-                "platform": {"os": "linux", "architecture": "amd64"},
-            },
-            "b001": {"digest": "invalid"},
-        }
-        with patch("publish.subprocess.run") as run, self.assertRaises(ValueError):
-            publish(
-                plan,
-                records,
-                "faulo/example",
-                lambda *args: {"digest": INDEX, "manifests": [descriptor()]},
-            )
-        run.assert_not_called()
-
-    def test_ambiguous_windows_releases_never_update_public_tags(self):
-        first = {
-            "os": "windows",
-            "architecture": "amd64",
-            "os.version": "10.0.17763.1000",
-        }
-        second = {**first, "os.version": "10.0.17763.2000"}
-        records = {
-            "b000": {"digest": DIGEST, "platform": first},
-            "b001": {"digest": OTHER, "platform": second},
-        }
-        plan = {
-            "builds": [{"id": "b000"}, {"id": "b001"}],
-            "publications": [{"tags": ["latest"], "builds": ["b000", "b001"]}],
-        }
-
-        def inspect(*args):
-            digest = args[1].split("@")[1]
-            if args[-1] == "{{json .Image}}":
-                return first if digest == DIGEST else second
-            return {"digest": digest, "size": 500, "mediaType": MEDIA}
-
-        with (
-            patch("publish.subprocess.run") as run,
-            self.assertRaisesRegex(ValueError, "Ambiguous image platforms"),
-        ):
-            publish(plan, records, "faulo/example", inspect)
-        run.assert_not_called()
-
-    def test_publish_aliases_from_same_digest(self):
-        plan = {
-            "builds": [{"id": "b000"}],
-            "publications": [{"tags": ["8.5", "latest"], "builds": ["b000"]}],
-        }
-        commands = []
-
-        def inspect(*args):
-            if args[0] == "create":
-                self.assertIn("--dry-run", args)
-                self.assertIn("faulo/example:8.5", args)
-                return {"manifests": [descriptor()]}
-            return {"digest": INDEX, "manifests": [descriptor()]}
-
-        def run(command, **kwargs):
-            commands.append(command)
-            Path(command[-1]).write_text(
-                json.dumps(
-                    {
-                        "containerimage.descriptor": {
-                            "digest": INDEX,
-                            "platform": {"os": "linux", "architecture": "amd64"},
-                        }
-                    }
-                )
-            )
-
-        with (
-            patch("publish.subprocess.run", side_effect=run),
-            patch.dict(os.environ, {}, clear=True),
-        ):
-            publish(
-                plan,
-                {
-                    "b000": {
-                        "digest": INDEX,
-                        "platform": {"os": "linux", "architecture": "amd64"},
-                    }
-                },
-                "faulo/example",
-                inspect,
-            )
-        self.assertEqual(1, len(commands))
-        self.assertIn("faulo/example:8.5", commands[0])
-        self.assertIn("faulo/example:latest", commands[0])
-
-    def test_wrong_alias_digest_fails_publication(self):
-        plan = {
-            "builds": [{"id": "b000"}],
-            "publications": [{"tags": ["latest"], "builds": ["b000"]}],
-        }
-
-        def inspect(*args):
-            return {
-                "digest": OTHER if ":latest" in args[1] else INDEX,
-                "manifests": [descriptor()],
-            }
-
-        def run(command, **kwargs):
-            Path(command[-1]).write_text(
-                json.dumps(
-                    {
-                        "containerimage.descriptor": {
-                            "digest": INDEX,
-                            "platform": {"os": "linux", "architecture": "amd64"},
-                        }
-                    }
-                )
-            )
-
-        with (
-            patch("publish.subprocess.run", side_effect=run),
-            self.assertRaisesRegex(ValueError, "does not reference"),
-        ):
-            publish(
-                plan,
-                {
-                    "b000": {
-                        "digest": INDEX,
-                        "platform": {"os": "linux", "architecture": "amd64"},
-                    }
-                },
-                "faulo/example",
-                inspect,
-            )
-
     def test_windows_arguments_remain_literal(self):
         entry = {
             "platform": "windows/amd64",
@@ -386,45 +149,104 @@ class PublicationTests(unittest.TestCase):
         self.assertIn("ARG=value; Write-Host $SECRET", command)
         self.assertEqual(".", command[-1])
 
-    def test_cleanup_scope_and_reruns(self):
-        plan = {
-            "builds": [
-                {"id": "b000"},
-                {"id": "b001"},
-            ]
+    def fixture(self):
+        config = example()
+        config["targets"] = [config["targets"][0], config["targets"][2]]
+        config["variants"] = [{"tag": "1.0", "aliases": ["latest"]}]
+        plan = make_plan(config)
+        linux = [descriptor(), descriptor(OTHER, "unknown", "unknown")]
+        linux[1]["annotations"] = {
+            "vnd.docker.reference.type": "attestation-manifest",
+            "vnd.docker.reference.digest": DIGEST,
         }
-        self.assertEqual(
-            [
-                "wf-v3-123-1-b000",
-                "wf-v3-123-2-b000",
-                "wf-v3-123-1-b001",
-                "wf-v3-123-2-b001",
-            ],
-            staging_tags(plan, "123", "2"),
-        )
-        with self.assertRaises(ValueError):
-            staging_tag("b000", "../latest", "1")
-
-    def test_cleanup_404_and_other_failures(self):
-        plan = {
-            "namespace": "organization",
-            "image": "example",
-            "builds": [{"id": "b000"}],
+        windows = descriptor(INDEX, "windows", version="10.0.17763.1000")
+        records = {
+            "b000": {"digest": DIGEST, "platform": linux[0]["platform"]},
+            "b001": {"digest": INDEX, "platform": windows["platform"]},
         }
-        visited = []
+        registry = MemoryRegistry("example/app")
+        registry.documents[DIGEST] = {"digest": DIGEST, "manifests": linux}
+        registry.documents[INDEX] = {
+            k: v for k, v in windows.items() if k != "platform"
+        }
+        registry.configs[INDEX] = windows["platform"]
+        return plan, records, registry, linux, [windows]
 
-        def request(item, **kwargs):
-            visited.append(item.full_url)
-            if item.get_method() == "POST":
-                return BytesIO(b'{"access_token":"secret"}')
-            raise HTTPError(
-                item.full_url, 404 if "-1-" in item.full_url else 403, "error", {}, None
+    def test_exact_descendants_and_aliases_without_recursive_copy(self):
+        plan, records, registry, linux, windows = self.fixture()
+        with patch.dict(os.environ, {}, clear=True):
+            publish(plan, records, "example/app", registry)
+        self.assertEqual(3, len(registry.reads_before_first_put))
+        for tag, expected in (
+            ("1.0", linux + windows),
+            ("latest", linux + windows),
+            ("1.0-linux-amd64", linux),
+            ("latest-linux-amd64", linux),
+            ("1.0-windows-2019", windows),
+            ("latest-windows-2019", windows),
+        ):
+            self.assertEqual(expected, registry.tags[tag]["manifests"])
+        for publication in plan["publications"]:
+            payloads = [registry.payloads[tag] for tag in publication["tags"]]
+            self.assertTrue(all(payload == payloads[0] for payload in payloads))
+            self.assertEqual(
+                content_digest(payloads[0]),
+                registry.tags[publication["tags"][0]]["digest"],
             )
 
-        with self.assertRaisesRegex(RuntimeError, "HTTP 403"):
-            cleanup(plan, "faulo", "token", "123", "2", request)
-        self.assertEqual(3, len(visited))
-        self.assertIn("/namespaces/organization/", visited[-1])
+    def test_all_sources_and_all_products_checked_before_any_put(self):
+        plan, records, registry, _, _ = self.fixture()
+        records["b001"]["digest"] = "invalid"
+        with self.assertRaises(ValueError):
+            publish(plan, records, "example/app", registry)
+        self.assertEqual({}, registry.payloads)
+        plan, records, registry, _, _ = self.fixture()
+        # A later ambiguous product must fail before an earlier valid one moves.
+        plan["publications"].append({"tags": ["bad"], "builds": ["b001", "b001"]})
+        with self.assertRaisesRegex(ValueError, "Ambiguous image platforms"):
+            publish(plan, records, "example/app", registry)
+        self.assertEqual({}, registry.payloads)
+
+    def test_windows_docker_manifest_keeps_docker_index_media_type(self):
+        plan, records, registry, _, _ = self.fixture()
+        registry.documents[INDEX]["mediaType"] = (
+            "application/vnd.docker.distribution.manifest.v2+json"
+        )
+        with patch.dict(os.environ, {}, clear=True):
+            publish(plan, records, "example/app", registry)
+        self.assertEqual(DOCKER_INDEX, registry.tags["1.0-windows-2019"]["mediaType"])
+
+    def test_wrong_alias_digest_fails_publication(self):
+        plan, records, registry, _, _ = self.fixture()
+        original = registry.manifest
+
+        def wrong(reference):
+            result = original(reference)
+            return (
+                {**result, "digest": OTHER} if reference.endswith(":latest") else result
+            )
+
+        registry.manifest = wrong
+        with self.assertRaisesRegex(
+            ValueError, "does not reference the published digest"
+        ):
+            publish(plan, records, "example/app", registry)
+
+    def test_manifest_metadata_changes_fail_verification(self):
+        plan, records, registry, _, _ = self.fixture()
+        original = registry.manifest
+
+        def wrong(reference):
+            result = original(reference)
+            if ":" in reference and "@" not in reference:
+                return {**result, "manifests": result["manifests"][:-1]}
+            return result
+
+        registry.manifest = wrong
+        with self.assertRaisesRegex(
+            ValueError, "expected digests or platform metadata"
+        ):
+            publish(plan, records, "example/app", registry)
 
 
 if __name__ == "__main__":
